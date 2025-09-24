@@ -39,7 +39,7 @@ else:
 def home():
     if session.get('autenticado_cliente'):
         return redirect(url_for('index'))
-    return redirect(url_for('login'))
+    return redirect(url_for('index')) #ajustar para login no futuro
 
 @app.route('/index', methods=['GET'])
 def index():
