@@ -127,7 +127,6 @@ body {
 
 .carousel-track {
   display: flex;
-  width: calc(300px * 7); /* 7 imagens, cada 300px */
   animation: scrollCarousel 28s linear infinite;
 }
 
@@ -136,13 +135,13 @@ body {
   height: 200px; /* altura fixa */
   object-fit: cover;
   flex-shrink: 0;
-  margin-right: 10px; /* espaçamento entre imagens */
+  margin-right: 10px;
 }
 
 /* Animação automática */
 @keyframes scrollCarousel {
   0% { transform: translateX(0); }
-  100% { transform: translateX(-calc(300px * 7)); }
+  100% { transform: translateX(-calc((300px + 10px) * 7)); }
 }
 
 /* ==== LOGO HERO ==== */
@@ -152,7 +151,7 @@ body {
 }
 
 .logo {
-  max-width: 280px;
+  max-width: 480px; /* era 280px, agora dobro */
   width: 100%;
   height: auto;
 }
