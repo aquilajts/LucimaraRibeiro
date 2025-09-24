@@ -3,21 +3,101 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nail Designer - Home</title>
+    <title>Estúdio de Nail Designer</title>
     <link rel="icon" type="image/png" href="/static/logo.png" />
     <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body>
-    <div class="container">
-        <div class="logo">
-            <h1>💅 Estúdio de Nail Designer</h1>
-            <p>Bem-vindo(a) ao seu painel</p>
+    <!-- Header -->
+    <header class="header">
+        <div class="topbar">
+            <div class="social-links">
+                <a href="#"><i class="fa-brands fa-facebook"></i></a>
+                <a href="#"><i class="fa-brands fa-instagram"></i></a>
+                <a href="#"><i class="fa-brands fa-whatsapp"></i></a>
+            </div>
         </div>
-        <div class="form-group">
+        <nav class="navbar">
+            <div class="logo">
+                <img src="/static/logo.png" alt="Logo" class="logo-img">
+                <h1>Estúdio de Nail Designer</h1>
+            </div>
+            <div class="menu-toggle">
+                <i class="fa fa-bars"></i>
+            </div>
+        </nav>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-content">
+            <h2>Beleza nas suas mãos</h2>
+            <p>Nail Artistry que brilha em cada detalhe</p>
+            <a href="#sobre" class="btn">Saiba Mais</a>
+        </div>
+    </section>
+
+    <!-- Sobre -->
+    <section id="sobre" class="about">
+        <h2>Sobre Nós</h2>
+        <p>No Estúdio de Nail Designer, entendemos que cada cliente é único. 
+        Oferecemos serviços personalizados de manicure, pedicure e nail art, 
+        sempre com atenção ao detalhe e sofisticação.</p>
+        <div class="about-buttons">
             <a href="/agendamentos" class="btn">Meus Agendamentos</a>
             <a href="/logout" class="btn btn-secondary">Sair</a>
         </div>
-    </div>
+    </section>
+
+    <!-- Estatísticas -->
+    <section class="stats">
+        <div class="stat-card">
+            <h3>10+</h3>
+            <p>Anos de Experiência</p>
+        </div>
+        <div class="stat-card">
+            <h3>100%</h3>
+            <p>Produtos Naturais</p>
+        </div>
+        <div class="stat-card">
+            <h3>2k+</h3>
+            <p>Clientes Satisfeitos</p>
+        </div>
+        <div class="stat-card">
+            <h3>5+</h3>
+            <p>Especialistas</p>
+        </div>
+    </section>
+
+    <!-- Serviços -->
+    <section id="servicos" class="services">
+        <h2>Nossos Serviços</h2>
+        <div class="service-list">
+            <div class="service-card">
+                <img src="/static/manicure.jpg" alt="Manicure">
+                <h3>Manicure</h3>
+            </div>
+            <div class="service-card">
+                <img src="/static/pedicure.jpg" alt="Pedicure">
+                <h3>Pedicure</h3>
+            </div>
+            <div class="service-card">
+                <img src="/static/nailart.jpg" alt="Nail Art">
+                <h3>Nail Art</h3>
+            </div>
+            <div class="service-card">
+                <img src="/static/parafina.jpg" alt="Parafina">
+                <h3>Tratamento com Parafina</h3>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <p>&copy; 2025 Estúdio de Nail Designer. Todos os direitos reservados.</p>
+    </footer>
+
+    <script src="https://kit.fontawesome.com/yourcode.js" crossorigin="anonymous"></script>
     <script src="/js/scripts.js"></script>
     <script>{{ session_script|safe }}</script>
 </body>
