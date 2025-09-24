@@ -120,7 +120,7 @@ body {
     
 } /* <-- FECHA AQUI O MEDIA QUERY */
 
-/* ==== CARROSSEL ==== */
+/* CARROSEL */
 .carousel {
   width: 100%;
   max-width: 1000px;
@@ -136,17 +136,17 @@ body {
 }
 
 .carousel img {
-  width: 300px;  /* largura fixa */
-  height: 200px; /* altura fixa */
+  width: 300px;   /* largura fixa */
+  height: 200px;  /* altura fixa */
   object-fit: cover;
   flex-shrink: 0;
   margin-right: 10px;
 }
 
-/* Animação automática */
+/* Animação contínua */
 @keyframes scrollCarousel {
-  0% { transform: translateX(0); }
-  100% { transform: translateX(-calc((300px + 10px) * 7)); }
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-2170px); } /* metade da faixa (7 imagens) */
 }
 
 /* ==== LOGO HERO ==== */
