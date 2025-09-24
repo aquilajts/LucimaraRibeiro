@@ -149,8 +149,8 @@ body {
 
 .logo {
   width: 90%;          /* ocupa 90% da tela em geral */
-  max-width: 1000px;   /* limite no desktop */
+  max-width: 700px;   /* limite no desktop */
   height: auto;
-  max-height: 250px;   /* no desktop, nunca ultrapassa 300px de altura */
+  max-height: 150px;   /* no desktop, nunca ultrapassa 300px de altura */
   object-fit: contain; /* garante que a proporção não distorce */
 }
