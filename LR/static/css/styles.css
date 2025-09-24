@@ -113,6 +113,8 @@ body {
         font-size: 16px;
         padding: 18px;
     }
+} /* <-- FECHA AQUI O MEDIA QUERY */
+
 /* ==== CARROSSEL ==== */
 .carousel {
   width: 100%;
@@ -125,27 +127,32 @@ body {
 
 .carousel-track {
   display: flex;
-  width: calc(100% * 7); /* 7 imagens */
-  animation: scrollCarousel 28s linear infinite; /* ajusta a velocidade aqui */
+  width: calc(300px * 7); /* 7 imagens, cada 300px */
+  animation: scrollCarousel 28s linear infinite;
 }
 
 .carousel img {
-  width: 100%;
-  max-width: 1000px;
-  height: 350px; /* ajuste conforme desejar */
+  width: 300px;  /* largura fixa */
+  height: 200px; /* altura fixa */
   object-fit: cover;
   flex-shrink: 0;
+  margin-right: 10px; /* espaçamento entre imagens */
 }
 
 /* Animação automática */
 @keyframes scrollCarousel {
   0% { transform: translateX(0); }
-  100% { transform: translateX(-700%); } /* -100% * nº de imagens */
+  100% { transform: translateX(-calc(300px * 7)); }
 }
 
-/* Responsividade */
-@media (max-width: 768px) {
-  .carousel img {
-    height: 200px;
-  }
+/* ==== LOGO HERO ==== */
+.logo-container {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.logo {
+  max-width: 280px;
+  width: 100%;
+  height: auto;
 }
