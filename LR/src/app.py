@@ -3,6 +3,7 @@ import sys
 import logging
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+from uuid import uuid4
 
 # DON'T CHANGE THIS !!!
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -74,7 +75,7 @@ def login():
         if not supabase:
             if nome_lower == "demo" and senha == "123456":
                 session['autenticado_cliente'] = True
-                session['id_cliente'] = "demo_123456"
+                session['id_cliente'] = "00000000-0000-0000-0000-000000000000"  # UUID fixo para demo
                 session.permanent = True
                 app.permanent_session_lifetime = timedelta(minutes=180)
                 return redirect(url_for('index'))
@@ -83,15 +84,23 @@ def login():
                                      erro="Modo demo: use 'demo' e senha '123456'", 
                                      authenticated=False, supabase=supabase)
         
-        # Lógica original com Supabase
+        # Lógica com Supabase
         try:
-            check_nome = supabase.table('clientes').select('id_cliente, senha, nome, aniversario').eq('nome_lower', nome_lower).execute()
+            # Autenticar usuário com Supabase Auth
+            email = f"{nome_lower}@naildesigner.com"
+            user = supabase.auth.sign_in_with_password({
+                "email": email,
+                "password": senha
+            })
             
-            if check_nome.data:
-                existing = check_nome.data[0]
-                if existing['senha'] == senha:
+            if user:
+                # Verificar se o cliente existe na tabela clientes
+                check_nome = supabase.table('clientes').select('id_cliente, nome, aniversario').eq('nome_lower', nome_lower).execute()
+                
+                if check_nome.data:
+                    existing = check_nome.data[0]
                     session['autenticado_cliente'] = True
-                    session['id_cliente'] = existing['id_cliente']
+                    session['id_cliente'] = str(existing['id_cliente'])  # Converter UUID para string na sessão
                     session.permanent = True
                     app.permanent_session_lifetime = timedelta(minutes=180)
 
@@ -101,32 +110,30 @@ def login():
 
                     return redirect(url_for('index'))
                 else:
-                    return render_template('login.html', 
-                                         erro="Senha incorreta. O nome já está cadastrado, tente outra senha ou nome.", 
-                                         authenticated=False, supabase=supabase)
-            else:
-                # Cadastro novo
-                id_cliente = f"{nome_lower}_{senha}"
-                new_client = {
-                    'nome': nome_input,
-                    'nome_lower': nome_lower,
-                    'senha': senha,
-                    'id_cliente': id_cliente
-                }
-                
-                result = supabase.table('clientes').insert(new_client).execute()
-                if result.data:
-                    session['autenticado_cliente'] = True
-                    session['id_cliente'] = id_cliente
-                    session.permanent = True
-                    app.permanent_session_lifetime = timedelta(minutes=180)
+                    # Criar novo cliente
+                    id_cliente = user.user.id  # Usar o UUID do usuário autenticado
+                    new_client = {
+                        'id_cliente': id_cliente,
+                        'nome': nome_input,
+                        'nome_lower': nome_lower,
+                        'created_at': datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat()
+                    }
                     
-                    # Novo cliente sempre terá aniversario vazio
-                    return render_template('login.html', solicitar_aniversario=True)
-                else:
-                    return render_template('login.html', 
-                                         erro="Erro ao cadastrar", 
-                                         authenticated=False, supabase=supabase)
+                    result = supabase.table('clientes').insert(new_client).execute()
+                    if result.data:
+                        session['autenticado_cliente'] = True
+                        session['id_cliente'] = str(id_cliente)
+                        session.permanent = True
+                        app.permanent_session_lifetime = timedelta(minutes=180)
+                        return render_template('login.html', solicitar_aniversario=True)
+                    else:
+                        return render_template('login.html', 
+                                             erro="Erro ao cadastrar", 
+                                             authenticated=False, supabase=supabase)
+            else:
+                return render_template('login.html', 
+                                     erro="Senha incorreta ou usuário não encontrado", 
+                                     authenticated=False, supabase=supabase)
         except Exception as e:
             logging.error(f"Erro ao cadastrar cliente: {str(e)}")
             return render_template('login.html', 
@@ -180,14 +187,15 @@ def esqueci_senha():
                                  erro="Data de aniversário incorreta", 
                                  authenticated=False, supabase=supabase)
 
-        # Se já veio a nova senha → redefinir
+        # Se já veio a nova senha → redefinir usando Supabase Auth
         if nova_senha:
             if len(nova_senha) < 6:
                 return render_template('login.html', 
                                      erro="Senha deve ter ao menos 6 dígitos", 
                                      authenticated=False, supabase=supabase)
 
-            supabase.table('clientes').update({'senha': nova_senha}).eq('id_cliente', cliente['id_cliente']).execute()
+            email = f"{nome}@naildesigner.com"
+            supabase.auth.admin.update_user_by_id(cliente['id_cliente'], {"password": nova_senha})
             return redirect(url_for('login', msg="Senha redefinida com sucesso!"))
 
         # Se ainda não veio a nova senha → renderiza o login pedindo a senha
@@ -201,11 +209,59 @@ def esqueci_senha():
 
 @app.route('/logout')
 def logout():
+    if supabase:
+        supabase.auth.sign_out()
     session.clear()
     return redirect(url_for('login'))
 
-# Rota para servir arquivos estáticos e SPA
-@app.route('/', defaults={'path': ''})
+@app.route('/agendamentos', methods=['GET', 'POST'])
+def agendamentos():
+    if not session.get('autenticado_cliente'):
+        return redirect(url_for('login'))
+    
+    if request.method == 'POST':
+        id_servico = request.form.get('id_servico')
+        data_agendamento = request.form.get('data_agendamento')
+        hora_agendamento = request.form.get('hora_agendamento')
+        observacoes = request.form.get('observacoes', '')
+        
+        if not all([id_servico, data_agendamento, hora_agendamento]):
+            return jsonify({"error": "Todos os campos são obrigatórios"}), 400
+        
+        try:
+            new_agendamento = {
+                'id_cliente': session['id_cliente'],
+                'id_servico': int(id_servico),
+                'data_agendamento': data_agendamento,
+                'hora_agendamento': hora_agendamento,
+                'status': 'pendente',
+                'observacoes': observacoes,
+                'created_at': datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat()
+            }
+            
+            result = supabase.table('agendamentos').insert(new_agendamento).execute()
+            if result.data:
+                return jsonify({"message": "Agendamento criado com sucesso"}), 200
+            else:
+                return jsonify({"error": "Erro ao criar agendamento"}), 500
+        except Exception as e:
+            logging.error(f"Erro ao criar agendamento: {str(e)}")
+            return jsonify({"error": "Erro ao criar agendamento"}), 500
+    
+    # GET: Listar agendamentos do cliente
+    try:
+        agendamentos = supabase.table('agendamentos').select('*').eq('id_cliente', session['id_cliente']).execute()
+        servicos = supabase.table('servicos').select('*').eq('ativo', True).execute()
+        return render_template('agendamentos.html', 
+                             agendamentos=agendamentos.data, 
+                             servicos=servicos.data,
+                             authenticated=True)
+    except Exception as e:
+        logging.error(f"Erro ao listar agendamentos: {str(e)}")
+        return render_template('agendamentos.html', 
+                             erro="Erro ao carregar agendamentos", 
+                             authenticated=True)
+
 @app.route('/<path:path>')
 def serve(path):
     static_folder_path = app.static_folder
@@ -216,7 +272,7 @@ def serve(path):
         return send_from_directory(static_folder_path, path)
     else:
         # Para rotas não encontradas, verifica se é uma rota da aplicação
-        if path in ['login', 'index', 'logout']:
+        if path in ['login', 'index', 'logout', 'agendamentos']:
             return globals()[path]()
         
         index_path = os.path.join(static_folder_path, 'index.html')
