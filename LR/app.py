@@ -45,14 +45,14 @@ def home():
 def index():
     logging.debug(f"Session check in /index: {session.get('autenticado_cliente')}")
     if not session.get('autenticado_cliente'):
-        return redirect(url_for('login'))
+        return redirect(url_for('index')) #ajustar
     
     # Checa tempo de sessão
     last_access = session.get('last_access')
     if last_access:
         if datetime.now(ZoneInfo("America/Sao_Paulo")) - last_access > timedelta(minutes=180):
             session.clear()
-            return redirect(url_for('login'))
+            return redirect(url_for('index')) #ajustar
     
     session['last_access'] = datetime.now(ZoneInfo("America/Sao_Paulo"))
     return render_template('index.html', 
@@ -65,8 +65,8 @@ def login():
         senha = request.form.get('senha', '')
         
         if len(senha) < 6:
-            return render_template('login.html', 
-                                 erro="Senha deve ter pelo menos 6 dígitos", 
+            return render_template('index.html', 
+                                 erro="Senha deve ter pelo menos 6 dígitos", #ajustar
                                  authenticated=False, supabase=supabase)
         
         nome_lower = nome_input.lower()
