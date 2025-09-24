@@ -1,1 +1,1 @@
-txt
+console.log("Scripts loaded");
