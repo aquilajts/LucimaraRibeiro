@@ -87,11 +87,11 @@ def login():
         # Lógica com Supabase
         try:
             # Autenticar usuário com Supabase Auth
-            email = f"{nome_lower}@naildesigner.com"
-            user = supabase.auth.sign_in_with_password({
-                "email": email,
-                "password": senha
-            })
+           email = f"{nome_lower}@naildesigner.com"  # Usar um domínio fictício
+           user = supabase.auth.sign_in_with_password({
+               "email": email,
+               "password": senha
+           })
             
             if user:
                 # Verificar se o cliente existe na tabela clientes
