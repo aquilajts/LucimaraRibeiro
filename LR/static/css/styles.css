@@ -113,4 +113,39 @@ body {
         font-size: 16px;
         padding: 18px;
     }
+/* ==== CARROSSEL ==== */
+.carousel {
+  width: 100%;
+  max-width: 1000px;
+  margin: 30px auto;
+  overflow: hidden;
+  border-radius: 15px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+}
+
+.carousel-track {
+  display: flex;
+  width: calc(100% * 7); /* 7 imagens */
+  animation: scrollCarousel 28s linear infinite; /* ajusta a velocidade aqui */
+}
+
+.carousel img {
+  width: 100%;
+  max-width: 1000px;
+  height: 350px; /* ajuste conforme desejar */
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+/* Animação automática */
+@keyframes scrollCarousel {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-700%); } /* -100% * nº de imagens */
+}
+
+/* Responsividade */
+@media (max-width: 768px) {
+  .carousel img {
+    height: 200px;
+  }
 }
