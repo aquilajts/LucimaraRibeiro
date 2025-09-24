@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 # DON'T CHANGE THIS !!!
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+sys.path.insert(0, os.path.dirname(__file__))
 
 from flask import Flask, send_from_directory, request, session, redirect, url_for, render_template, jsonify
 from dotenv import load_dotenv
@@ -17,9 +17,10 @@ logging.basicConfig(level=logging.DEBUG)
 # Carrega variáveis de ambiente
 load_dotenv()
 
+# Configuração do Flask com caminhos corretos para LR/public/ e LR/static/
 app = Flask(__name__, 
-           static_folder=os.path.join(os.path.dirname(os.path.dirname(__file__)), 'public'),
-           template_folder=os.path.join(os.path.dirname(os.path.dirname(__file__)), 'public'))
+            static_folder=os.path.join(os.path.dirname(__file__), 'static'),
+            template_folder=os.path.join(os.path.dirname(__file__), 'public'))
 
 app.secret_key = os.getenv('SECRET_KEY', 'nail_designer_lucimara_2025')
 
@@ -263,7 +264,7 @@ def agendamentos():
 
 @app.route('/static/<path:path>')
 def serve_static(path):
-    static_folder_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static')
+    static_folder_path = os.path.join(os.path.dirname(__file__), 'static')
     if os.path.exists(os.path.join(static_folder_path, path)):
         return send_from_directory(static_folder_path, path)
     return "File not found", 404
