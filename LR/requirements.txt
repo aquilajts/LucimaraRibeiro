@@ -1,4 +1,4 @@
 flask==3.0.3
 python-dotenv==1.0.1
-py-supabase==2.9.0
+supabase==2.20.0
 gunicorn==23.0.0
