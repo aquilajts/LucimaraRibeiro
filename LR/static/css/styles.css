@@ -103,6 +103,10 @@ body {
     .hero .logo {
         font-size: 32px;
     }
+  .logo {
+    max-width: 90%; /* ocupa quase toda a largura da tela */
+  }
+
     .hero .subtitle {
         font-size: 16px;
     }
@@ -113,6 +117,7 @@ body {
         font-size: 16px;
         padding: 18px;
     }
+    
 } /* <-- FECHA AQUI O MEDIA QUERY */
 
 /* ==== CARROSSEL ==== */
