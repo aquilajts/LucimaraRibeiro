@@ -100,24 +100,16 @@ body {
 
 /* Responsividade */
 @media (max-width: 600px) {
-    .hero .logo {
-        font-size: 32px;
-    }
-  .logo {
-    max-width: 90%; /* ocupa quase toda a largura da tela */
+  .hero .subtitle {
+    font-size: 16px;
   }
-
-    .hero .subtitle {
-        font-size: 16px;
-    }
-    .sobre h2, .servicos h2 {
-        font-size: 22px;
-    }
-    .card {
-        font-size: 16px;
-        padding: 18px;
-    }
-    
+  .sobre h2, .servicos h2 {
+    font-size: 22px;
+  }
+  .card {
+    font-size: 16px;
+    padding: 18px;
+  }
 } /* <-- FECHA AQUI O MEDIA QUERY */
 
 /* CARROSEL */
@@ -156,7 +148,9 @@ body {
 }
 
 .logo {
-  max-width: 480px; /* era 280px, agora dobro */
-  width: 100%;
+  width: 90%;          /* ocupa 90% da tela em geral */
+  max-width: 1000px;   /* limite no desktop */
   height: auto;
+  max-height: 300px;   /* no desktop, nunca ultrapassa 300px de altura */
+  object-fit: contain; /* garante que a proporção não distorce */
 }
