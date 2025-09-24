@@ -74,7 +74,7 @@ def login():
         if not supabase:
             if nome_lower == "demo" and senha == "123456":
                 session['autenticado_cliente'] = True
-                session['id_cliente'] = "demo_123456"
+                session['id_cliente'] = "00000000-0000-0000-0000-000000000000"  # UUID fixo para demo
                 session.permanent = True
                 app.permanent_session_lifetime = timedelta(minutes=180)
                 return redirect(url_for('index'))
@@ -83,15 +83,22 @@ def login():
                                      erro="Modo demo: use 'demo' e senha '123456'", 
                                      authenticated=False, supabase=supabase)
         
-        # Lógica original com Supabase
+        # Lógica com Supabase
         try:
-            check_nome = supabase.table('clientes').select('id_cliente, senha, nome, aniversario').eq('nome_lower', nome_lower).execute()
+            # Autenticar usuário com Supabase Auth
+            user = supabase.auth.sign_in_with_password({
+                "email": f"{nome_lower}@naildesigner.com",  -- Usar um domínio fictício
+                "password": senha
+            })
             
-            if check_nome.data:
-                existing = check_nome.data[0]
-                if existing['senha'] == senha:
+            if user:
+                # Verificar se o cliente existe na tabela clientes
+                check_nome = supabase.table('clientes').select('id_cliente, senha, nome, aniversario').eq('nome_lower', nome_lower).execute()
+                
+                if check_nome.data:
+                    existing = check_nome.data[0]
                     session['autenticado_cliente'] = True
-                    session['id_cliente'] = existing['id_cliente']
+                    session['id_cliente'] = str(existing['id_cliente'])  # Converter UUID para string na sessão
                     session.permanent = True
                     app.permanent_session_lifetime = timedelta(minutes=180)
 
@@ -101,32 +108,31 @@ def login():
 
                     return redirect(url_for('index'))
                 else:
-                    return render_template('login.html', 
-                                         erro="Senha incorreta. O nome já está cadastrado, tente outra senha ou nome.", 
-                                         authenticated=False, supabase=supabase)
-            else:
-                # Cadastro novo
-                id_cliente = f"{nome_lower}_{senha}"
-                new_client = {
-                    'nome': nome_input,
-                    'nome_lower': nome_lower,
-                    'senha': senha,
-                    'id_cliente': id_cliente
-                }
-                
-                result = supabase.table('clientes').insert(new_client).execute()
-                if result.data:
-                    session['autenticado_cliente'] = True
-                    session['id_cliente'] = id_cliente
-                    session.permanent = True
-                    app.permanent_session_lifetime = timedelta(minutes=180)
+                    # Criar novo cliente
+                    id_cliente = user.user.id  # Usar o UUID do usuário autenticado
+                    new_client = {
+                        'id_cliente': id_cliente,
+                        'nome': nome_input,
+                        'nome_lower': nome_lower,
+                        'senha': senha,  -- Senha já gerenciada pelo Supabase Auth
+                        'created_at': datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat()
+                    }
                     
-                    # Novo cliente sempre terá aniversario vazio
-                    return render_template('login.html', solicitar_aniversario=True)
-                else:
-                    return render_template('login.html', 
-                                         erro="Erro ao cadastrar", 
-                                         authenticated=False, supabase=supabase)
+                    result = supabase.table('clientes').insert(new_client).execute()
+                    if result.data:
+                        session['autenticado_cliente'] = True
+                        session['id_cliente'] = str(id_cliente)
+                        session.permanent = True
+                        app.permanent_session_lifetime = timedelta(minutes=180)
+                        return render_template('login.html', solicitar_aniversario=True)
+                    else:
+                        return render_template('login.html', 
+                                             erro="Erro ao cadastrar", 
+                                             authenticated=False, supabase=supabase)
+            else:
+                return render_template('login.html', 
+                                     erro="Senha incorreta ou usuário não encontrado", 
+                                     authenticated=False, supabase=supabase)
         except Exception as e:
             logging.error(f"Erro ao cadastrar cliente: {str(e)}")
             return render_template('login.html', 
