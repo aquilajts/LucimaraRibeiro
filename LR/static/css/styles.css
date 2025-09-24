@@ -138,7 +138,7 @@ body {
 /* Animação contínua */
 @keyframes scrollCarousel {
   0%   { transform: translateX(0); }
-  100% { transform: translateX(-2170px); } /* metade da faixa (7 imagens) */
+  100% { transform: translateX(-4170px); } /* metade da faixa (7 imagens) */
 }
 
 /* ==== LOGO HERO ==== */
@@ -148,9 +148,9 @@ body {
 }
 
 .logo {
-  width: 90%;          /* ocupa 90% da tela em geral */
-  max-width: 1000px;   /* limite no desktop */
+  width: 120%;          /* ocupa 90% da tela em geral */
+  max-width: 1500px;   /* limite no desktop */
   height: auto;
-  max-height: 300px;   /* no desktop, nunca ultrapassa 300px de altura */
+  max-height: 500px;   /* no desktop, nunca ultrapassa 300px de altura */
   object-fit: contain; /* garante que a proporção não distorce */
 }
