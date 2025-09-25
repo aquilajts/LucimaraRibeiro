@@ -104,7 +104,7 @@ body {
 /* Responsividade */
 @media (max-width: 600px) {
   .hero .subtitle {
-    font-size: 16px;
+    font-size: 30px;
   }
   .sobre h2, .servicos h2 {
     font-size: 22px;
