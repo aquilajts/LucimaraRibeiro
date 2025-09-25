@@ -67,7 +67,7 @@ def login():
                             solicitar_aniversario = True
                         else:
                             session["user"] = cliente
-                            return redirect(url_for("index"))
+                            return redirect(url_for("agendamento"))
                     else:
                         erro = "Senha incorreta."
                 else:
@@ -85,7 +85,7 @@ def login():
                 # Modo Demo
                 if nome == "demo" and senha == "123456":
                     session["user"] = {"nome": "Demo"}
-                    return redirect(url_for("index"))
+                    return redirect(url_for("agendamento"))
                 else:
                     erro = "Usuário demo inválido."
 
@@ -116,7 +116,7 @@ def atualizar_aniversario():
 
     session["user"] = user
     session.pop("temp_user", None)
-    return redirect(url_for("index"))
+    return redirect(url_for("agendamento"))
 
 
 @app.route("/esqueci_senha", methods=["POST"])
