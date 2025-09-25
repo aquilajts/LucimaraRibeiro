@@ -91,12 +91,14 @@ document.addEventListener('DOMContentLoaded', function () {
             const novaSenhaField = document.getElementById('nova_senha');
 
             // Etapa 1: nome + aniversário
-            if (nomeField && aniversarioField) {
+            if (nomeField) {
                 if (nomeField.value.trim() === '') {
                     event.preventDefault();
                     alert('Por favor, preencha o campo Nome.');
                     return;
                 }
+            }
+            if (aniversarioField) {
                 if (!aniversarioField.value) {
                     event.preventDefault();
                     alert('Por favor, preencha a data de aniversário.');
