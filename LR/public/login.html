@@ -65,7 +65,7 @@
         </form>
 
         <div class="forgot-password">
-            <a href="#" onclick="openForgotPasswordModal()">Esqueci minha senha</a>
+            <a href="#" id="forgotPasswordLink">Esqueci minha senha</a>
         </div>
         {% endif %}
     </main>
@@ -89,9 +89,7 @@
         </div>
     </div>
 
-    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
-
-        <!-- Carrossel -->
+            <!-- Carrossel -->
     <div class="carousel">
       <div class="carousel-track">
         <!-- Bloco 1 -->
@@ -119,5 +117,8 @@
         <p>© 2025 Estúdio Lucimara Ribeiro. Todos os direitos reservados.</p>
         <p>Desde 2007 - @LuRibeiroBeauty</p>
     </footer>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+    
 </body>
 </html>
