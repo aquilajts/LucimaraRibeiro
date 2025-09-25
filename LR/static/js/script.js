@@ -12,12 +12,12 @@ function closeForgotPasswordModal() {
     document.getElementById('forgotPasswordModal').style.display = 'none';
 }
 // Fechar clicando fora
-window.onclick = function (event) {
+window.addEventListener('click', function (event) {
     const modal = document.getElementById('forgotPasswordModal');
-    if (event.target === modal) {
+    if (modal && event.target === modal) {
         modal.style.display = 'none';
     }
-};
+});
 
 /* =========================
    EFEITOS VISUAIS
