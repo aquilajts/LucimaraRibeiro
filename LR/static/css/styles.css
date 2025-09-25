@@ -24,7 +24,7 @@ body {
     font-weight: bold;
 }
 .hero .subtitle {
-    font-size: 20px;
+    font-size: 45px;
     margin-top: 5px;   /* reduz espaço abaixo do logo */
     opacity: 0.9;
     font-family: 'Great Vibes', serif; /* nova fonte */
