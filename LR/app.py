@@ -3,7 +3,14 @@ from supabase import create_client, Client
 from datetime import datetime
 import os
 
-app = Flask(__name__)
+
+from flask import Flask
+
+app = Flask(
+    __name__,
+    template_folder="public",  # onde estão os HTMLs
+    static_folder="static"     # onde estão CSS, JS, imagens
+)
 app.secret_key = os.getenv('SECRET_KEY', 'nail_designer_lucimara_2025')
 
 # Config Supabase
