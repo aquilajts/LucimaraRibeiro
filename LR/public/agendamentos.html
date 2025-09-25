@@ -1,1 +1,52 @@
-txt
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agendamento - Nail Designer</title>
+    <link rel="icon" type="image/png" href="/static/logo.png" />
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+    <header class="header">
+        <div class="logo">
+            <img src="/static/logo.png" alt="Logo" class="logo-img">
+            <h1>Lucimara Ribeiro</h1>
+            <p>Nail Designer</p>
+        </div>
+    </header>
+
+    <div class="container">
+        <h2>Agendar Serviço</h2>
+        <form method="POST" action="/salvar_agendamento">
+            <div class="form-group">
+                <label for="servico">Selecione o Serviço:</label>
+                <select id="servico" name="servico" required>
+                    <option value="">-- Escolha --</option>
+                    <option value="1">💅 Manicure</option>
+                    <option value="2">🦶 Pedicure</option>
+                    <option value="3">🎨 Spa e Plástica dos Pés</option>
+                    <option value="4">✨ Sobrancelha</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="data">Data:</label>
+                <input type="date" id="data" name="data" required>
+            </div>
+
+            <div class="form-group">
+                <label for="hora">Horário:</label>
+                <input type="time" id="hora" name="hora" required>
+            </div>
+
+            <div class="form-group">
+                <label for="obs">Observações:</label>
+                <textarea id="obs" name="obs" rows="3"></textarea>
+            </div>
+
+            <button type="submit" class="btn">Agendar</button>
+        </form>
+    </div>
+</body>
+</html>
