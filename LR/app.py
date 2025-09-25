@@ -74,7 +74,6 @@ def login():
                     # Cadastrar novo usuário
                     data = {
                         "nome": nome,
-                        "nome_lower": nome.lower(),
                         "email": email,
                         "senha": senha,
                         "telefone": None
