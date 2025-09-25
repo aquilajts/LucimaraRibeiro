@@ -5,19 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lucimara Ribeiro - Agendamento</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
-    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/script.js') }}" defer></script>
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='logo.png') }}" />
 </head>
 <body>
     <!-- Hero -->
     <header class="hero">
         <div class="logo-container">
-          <img src="{{ url_for('static', filename='logo.png') }}" alt="Lucimara Ribeiro Logo" class="logo">
+            <img src="{{ url_for('static', filename='logo.png') }}" alt="Lucimara Ribeiro Logo" class="logo">
         </div>
     </header>
 
-    <div class="container">
+    <!-- Container do Formulário -->
+    <div class="container form-container">
         <h2>Agendar Serviço</h2>
+
+        {% if request.args.get('msg') %}
+        <div class="success">{{ request.args.get('msg') }}</div>
+        {% endif %}
+
         <form method="POST" action="/salvar_agendamento">
             <div class="form-group">
                 <label for="servico">Selecione o Serviço:</label>
@@ -48,33 +54,34 @@
             <button type="submit" class="btn">Agendar</button>
         </form>
     </div>
-            <!-- Carrossel -->
+
+    <!-- Carrossel -->
     <div class="carousel">
-      <div class="carousel-track">
-        <!-- Bloco 1 -->
-        <img src="{{ url_for('static', filename='nail1.jpg') }}" alt="Nail 1">
-        <img src="{{ url_for('static', filename='nail2.jpg') }}" alt="Nail 2">
-        <img src="{{ url_for('static', filename='nail3.jpg') }}" alt="Nail 3">
-        <img src="{{ url_for('static', filename='nail4.jpg') }}" alt="Nail 4">
-        <img src="{{ url_for('static', filename='nail5.jpg') }}" alt="Nail 5">
-        <img src="{{ url_for('static', filename='nail6.jpg') }}" alt="Nail 6">
-        <img src="{{ url_for('static', filename='nail7.jpg') }}" alt="Nail 7">
-    
-        <!-- Bloco 2 (duplicado) -->
-        <img src="{{ url_for('static', filename='nail1.jpg') }}" alt="Nail 1">
-        <img src="{{ url_for('static', filename='nail2.jpg') }}" alt="Nail 2">
-        <img src="{{ url_for('static', filename='nail3.jpg') }}" alt="Nail 3">
-        <img src="{{ url_for('static', filename='nail4.jpg') }}" alt="Nail 4">
-        <img src="{{ url_for('static', filename='nail5.jpg') }}" alt="Nail 5">
-        <img src="{{ url_for('static', filename='nail6.jpg') }}" alt="Nail 6">
-        <img src="{{ url_for('static', filename='nail7.jpg') }}" alt="Nail 7">
-      </div>
+        <div class="carousel-track">
+            <img src="{{ url_for('static', filename='nail1.jpg') }}" alt="Nail 1">
+            <img src="{{ url_for('static', filename='nail2.jpg') }}" alt="Nail 2">
+            <img src="{{ url_for('static', filename='nail3.jpg') }}" alt="Nail 3">
+            <img src="{{ url_for('static', filename='nail4.jpg') }}" alt="Nail 4">
+            <img src="{{ url_for('static', filename='nail5.jpg') }}" alt="Nail 5">
+            <img src="{{ url_for('static', filename='nail6.jpg') }}" alt="Nail 6">
+            <img src="{{ url_for('static', filename='nail7.jpg') }}" alt="Nail 7">
+
+            <!-- Duplicado para rolagem contínua -->
+            <img src="{{ url_for('static', filename='nail1.jpg') }}" alt="Nail 1">
+            <img src="{{ url_for('static', filename='nail2.jpg') }}" alt="Nail 2">
+            <img src="{{ url_for('static', filename='nail3.jpg') }}" alt="Nail 3">
+            <img src="{{ url_for('static', filename='nail4.jpg') }}" alt="Nail 4">
+            <img src="{{ url_for('static', filename='nail5.jpg') }}" alt="Nail 5">
+            <img src="{{ url_for('static', filename='nail6.jpg') }}" alt="Nail 6">
+            <img src="{{ url_for('static', filename='nail7.jpg') }}" alt="Nail 7">
+        </div>
     </div>
-    
-        <!-- Rodapé -->
+
+    <!-- Rodapé -->
     <footer class="rodape">
         <p>© 2025 Estúdio Lucimara Ribeiro. Todos os direitos reservados.</p>
         <p>Desde 2007 - @LuRibeiroBeauty</p>
     </footer>
+
 </body>
 </html>
