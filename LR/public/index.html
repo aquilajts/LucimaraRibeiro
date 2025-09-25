@@ -45,10 +45,10 @@
         <h2>Nossos Serviços</h2>
         <p>Escolha a categoria desejada</p>
         <div class="cards">
-            <div class="card">💅 Manicure</div>
-            <div class="card">🦶 Pedicure</div>
-            <div class="card">🎨 Spa e plástica dos pés</div>
-            <div class="card">✨ Sobrancelha</div>
+            <button class="card" onclick="verificarAuth()">💅 Manicure</button>
+            <button class="card" onclick="verificarAuth()">🦶 Pedicure</button>
+            <button class="card" onclick="verificarAuth()">🎨 Spa e plástica dos pés</button>
+            <button class="card" onclick="verificarAuth()">✨ Sobrancelha</button>
         </div>
     </section>
 
@@ -71,5 +71,20 @@
         <p>© 2025 Estúdio Lucimara Ribeiro. Todos os direitos reservados.</p>
         <p>Desde 2007 - @LuRibeiroBeauty</p>
     </footer>
+
+    <script>
+      function verificarAuth() {
+        // Exemplo: verificação com localStorage (ajuste conforme seu backend/Supabase)
+        const usuarioLogado = localStorage.getItem("usuarioLogado"); 
+    
+        if (usuarioLogado) {
+          // Usuário autenticado → manda para agendamento
+          window.location.href = "agendamento.html";
+        } else {
+          // Usuário não autenticado → redireciona para login
+          window.location.href = "login.html";
+        }
+      }
+    </script>
 </body>
 </html>
