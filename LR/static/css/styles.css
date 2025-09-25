@@ -85,8 +85,11 @@ body {
     font-size: 18px;
     font-weight: bold;
     transition: transform 0.3s ease, background 0.3s ease;
-    cursor: default;
+    cursor: pointer; /* já era default em div, mas reforça aqui */
+    border: none;     /* remove borda padrão de button */
+    color: inherit;   /* mantém a cor do texto */
 }
+
 .card:hover {
     transform: scale(1.05);
     background: rgba(255, 255, 255, 0.3);
