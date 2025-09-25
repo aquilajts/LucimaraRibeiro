@@ -1,93 +1,109 @@
 console.log("Script loaded");
 
-// Função para abrir o modal de recuperação de senha
+/* =========================
+   MODAL ESQUECI SENHA
+========================= */
+// Abrir
 function openForgotPasswordModal() {
-    document.getElementById('forgotPasswordModal').style.display = 'block';
+    document.getElementById('forgotPasswordModal').style.display = 'flex';
 }
-
-// Função para fechar o modal de recuperação de senha
+// Fechar
 function closeForgotPasswordModal() {
     document.getElementById('forgotPasswordModal').style.display = 'none';
 }
-
-// Fecha modal ao clicar fora dele
-window.onclick = function(event) {
+// Fechar clicando fora
+window.onclick = function (event) {
     const modal = document.getElementById('forgotPasswordModal');
-    if (event.target == modal) {
+    if (event.target === modal) {
         modal.style.display = 'none';
     }
-}
+};
 
-// Adiciona efeitos visuais aos inputs
+/* =========================
+   EFEITOS VISUAIS
+========================= */
 document.querySelectorAll('input, textarea, select').forEach(input => {
-    input.addEventListener('focus', function() {
+    input.addEventListener('focus', function () {
         this.parentElement.style.transform = 'scale(1.02)';
     });
-    
-    input.addEventListener('blur', function() {
+    input.addEventListener('blur', function () {
         this.parentElement.style.transform = 'scale(1)';
     });
 });
 
-// Animação de loading no botão
+/* =========================
+   LOADING NOS BOTÕES
+========================= */
 document.querySelectorAll('form').forEach(form => {
-    form.addEventListener('submit', function() {
+    form.addEventListener('submit', function () {
         const btn = this.querySelector('.btn:not(.btn-secondary)');
         if (btn) {
+            btn.dataset.originalText = btn.innerHTML;
             btn.innerHTML = '⏳ Carregando...';
             btn.disabled = true;
         }
     });
 });
 
-// Validação no lado do cliente para formulários
-document.addEventListener('DOMContentLoaded', function() {
+/* =========================
+   VALIDAÇÃO FORMULÁRIOS
+========================= */
+document.addEventListener('DOMContentLoaded', function () {
+    // LOGIN
     const loginForm = document.querySelector('form[action="/login"]');
     if (loginForm) {
-        loginForm.addEventListener('submit', function(event) {
+        loginForm.addEventListener('submit', function (event) {
             const nome = document.getElementById('nome').value.trim();
             const senha = document.getElementById('senha').value;
+
             if (nome === '') {
                 event.preventDefault();
                 alert('Por favor, preencha o campo Nome.');
-                const btn = this.querySelector('.btn');
-                btn.innerHTML = 'Entrar / Cadastrar';
-                btn.disabled = false;
+                resetButton(this);
             } else if (senha.length < 6) {
                 event.preventDefault();
                 alert('A senha deve ter pelo menos 6 dígitos.');
-                const btn = this.querySelector('.btn');
-                btn.innerHTML = 'Entrar / Cadastrar';
-                btn.disabled = false;
+                resetButton(this);
             }
         });
     }
 
-    const recuperarSenhaForm = document.querySelector('form[action="/esqueci_senha"]');
-    if (recuperarSenhaForm) {
-        recuperarSenhaForm.addEventListener('submit', function(event) {
+    // ESQUECI SENHA (modal ou redefinição)
+    const recuperarSenhaForms = document.querySelectorAll('form[action="/esqueci_senha"]');
+    recuperarSenhaForms.forEach(form => {
+        form.addEventListener('submit', function (event) {
             const nome = document.getElementById('modal_nome')?.value.trim();
             const aniversario = document.getElementById('modal_aniversario')?.value;
             const novaSenha = document.getElementById('nova_senha')?.value;
-            if (nome && nome === '') {
+
+            if (nome !== undefined && nome === '') {
                 event.preventDefault();
                 alert('Por favor, preencha o campo Nome.');
-                const btn = this.querySelector('.btn');
-                btn.innerHTML = novaSenha ? 'Redefinir Senha' : 'Verificar';
-                btn.disabled = false;
-            } else if (aniversario && !aniversario) {
+                resetButton(this, novaSenha);
+            } else if (aniversario !== undefined && aniversario === '') {
                 event.preventDefault();
                 alert('Por favor, preencha a data de aniversário.');
-                const btn = this.querySelector('.btn');
-                btn.innerHTML = novaSenha ? 'Redefinir Senha' : 'Verificar';
-                btn.disabled = false;
-            } else if (novaSenha && novaSenha.length < 6) {
+                resetButton(this, novaSenha);
+            } else if (novaSenha !== undefined && novaSenha.length < 6) {
                 event.preventDefault();
                 alert('A nova senha deve ter pelo menos 6 dígitos.');
-                const btn = this.querySelector('.btn');
-                btn.innerHTML = 'Redefinir Senha';
-                btn.disabled = false;
+                resetButton(this, novaSenha);
             }
         });
-    }
+    });
 });
+
+/* =========================
+   FUNÇÃO AUXILIAR
+========================= */
+function resetButton(form, novaSenha = null) {
+    const btn = form.querySelector('.btn');
+    if (btn && btn.dataset.originalText) {
+        btn.innerHTML = btn.dataset.originalText;
+        btn.disabled = false;
+    } else if (btn) {
+        // fallback caso não tenha dataset salvo
+        btn.innerHTML = novaSenha ? 'Redefinir Senha' : 'Verificar';
+        btn.disabled = false;
+    }
+}
