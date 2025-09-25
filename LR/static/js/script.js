@@ -1,4 +1,4 @@
-console.log("Scripts loaded");
+console.log("Script loaded");
 
 // Função para abrir o modal de recuperação de senha
 function openForgotPasswordModal() {
