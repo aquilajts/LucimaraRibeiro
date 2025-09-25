@@ -69,29 +69,45 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // ESQUECI SENHA (modal ou redefinição)
-    const recuperarSenhaForms = document.querySelectorAll('form[action="/esqueci_senha"]');
-    recuperarSenhaForms.forEach(form => {
-        form.addEventListener('submit', function (event) {
-            const nome = document.getElementById('modal_nome')?.value.trim();
-            const aniversario = document.getElementById('modal_aniversario')?.value;
-            const novaSenha = document.getElementById('nova_senha')?.value;
+      const recuperarSenhaForm = document.querySelector('form[action="/esqueci_senha"]');
+      if (recuperarSenhaForm) {
+          recuperarSenhaForm.addEventListener('submit', function(event) {
+              const nomeField = document.getElementById('modal_nome');
+              const aniversarioField = document.getElementById('modal_aniversario');
+              const novaSenhaField = document.getElementById('nova_senha');
+      
+              // Etapa 1: nome + aniversário
+              if (nomeField && aniversarioField) {
+                  if (nomeField.value.trim() === '') {
+                      event.preventDefault();
+                      alert('Por favor, preencha o campo Nome.');
+                      return;
+                  }
+                  if (!aniversarioField.value) {
+                      event.preventDefault();
+                      alert('Por favor, preencha a data de aniversário.');
+                      return;
+                  }
+              }
+      
+              // Etapa 2: nova senha
+              if (novaSenhaField) {
+                  if (novaSenhaField.value.length < 6) {
+                      event.preventDefault();
+                      alert('A nova senha deve ter pelo menos 6 dígitos.');
+                      return;
+                  }
+              }
+      
+              // Se passar em todas as validações, botão mostra carregando
+              const btn = this.querySelector('.btn');
+              if (btn) {
+                  btn.innerHTML = novaSenhaField ? 'Redefinindo...' : '⏳ Carregando...';
+                  btn.disabled = true;
+              }
+          });
+      }
 
-            if (nome !== undefined && nome === '') {
-                event.preventDefault();
-                alert('Por favor, preencha o campo Nome.');
-                resetButton(this, novaSenha);
-            } else if (aniversario !== undefined && aniversario === '') {
-                event.preventDefault();
-                alert('Por favor, preencha a data de aniversário.');
-                resetButton(this, novaSenha);
-            } else if (novaSenha !== undefined && novaSenha.length < 6) {
-                event.preventDefault();
-                alert('A nova senha deve ter pelo menos 6 dígitos.');
-                resetButton(this, novaSenha);
-            }
-        });
-    });
-});
 
 /* =========================
    FUNÇÃO AUXILIAR
