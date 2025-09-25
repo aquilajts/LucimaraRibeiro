@@ -3,16 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nail Designer - Login</title>
+    <title>Lucimara Ribeiro - Login</title>
     <link rel="icon" type="image/png" href="/static/logo.png" />
     <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body>
-    <div class="container">
+    <header class="header">
         <div class="logo">
-            <h1>💅 Estúdio de Nail Designer</h1>
-            <p>Faça seu login para continuar</p>
+            <img src="/static/logo.png" alt="Logo" class="logo-img">
+            <h1>Lucimara Ribeiro</h1>
+            <p>Nail Designer</p>
         </div>
+    </header>
+
+    <div class="container">
+        <h2>Acesse sua conta</h2>
 
         {% if erro %}
         <div class="error">{{ erro }}</div>
@@ -22,28 +27,19 @@
         <div class="success">{{ request.args.get('msg') }}</div>
         {% endif %}
 
-        {% if show_tutorial %}
-        <div class="tutorial">
-            <h3>Como usar:</h3>
-            <p><strong>Novo usuário:</strong> Digite seu nome e uma senha de 6+ dígitos para se cadastrar automaticamente.</p>
-            <p><strong>Usuário existente:</strong> Use o mesmo nome e senha que você cadastrou.</p>
-        </div>
-        {% endif %}
-
-        {% if not supabase %}
-        <div class="demo-info">
-            <strong>Modo Demo:</strong> Use "demo" como nome e "123456" como senha para testar a aplicação.
-        </div>
-        {% endif %}
-
         {% if solicitar_aniversario %}
         <form method="POST" action="/atualizar_aniversario">
             <div class="form-group">
                 <label for="aniversario">Data de Aniversário:</label>
                 <input type="date" id="aniversario" name="aniversario" required>
             </div>
+            <div class="form-group">
+                <label for="telefone">Telefone (WhatsApp):</label>
+                <input type="text" id="telefone" name="telefone" required>
+            </div>
             <button type="submit" class="btn">Salvar e Continuar</button>
         </form>
+
         {% elif reset_senha %}
         <form method="POST" action="/esqueci_senha">
             <input type="hidden" name="nome" value="{{ nome }}">
@@ -53,8 +49,8 @@
                 <input type="password" id="nova_senha" name="nova_senha" required minlength="6">
             </div>
             <button type="submit" class="btn">Redefinir Senha</button>
-            <button type="button" class="btn btn-secondary" onclick="window.location.href='/login'">Cancelar</button>
         </form>
+
         {% else %}
         <form method="POST" action="/login">
             <div class="form-group">
@@ -78,7 +74,7 @@
     <div id="forgotPasswordModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeForgotPasswordModal()">&times;</span>
-            <h2 style="margin-bottom: 20px; color: #333;">Recuperar Senha</h2>
+            <h2>Recuperar Senha</h2>
             <form method="POST" action="/esqueci_senha">
                 <div class="form-group">
                     <label for="modal_nome">Nome:</label>
@@ -89,7 +85,6 @@
                     <input type="date" id="modal_aniversario" name="aniversario" required>
                 </div>
                 <button type="submit" class="btn">Verificar</button>
-                <button type="button" class="btn btn-secondary" onclick="closeForgotPasswordModal()">Cancelar</button>
             </form>
         </div>
     </div>
