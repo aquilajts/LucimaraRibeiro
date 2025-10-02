@@ -1,12 +1,18 @@
-# cloudbuild.yaml (na raiz do repo)
+# cloudbuild.yaml (COLE na RAIZ do repo: LucimaraRibeiro/cloudbuild.yaml)
 substitutions:
-  _SERVICE: "luribeiro"    # troque para o nome do seu serviço Cloud Run
-  _REGION: "us-central1"         # troque para a região que preferir (ex: europe-west1, us-central1)
+  _SERVICE: "luribeiro"      # nome do serviço Cloud Run (troque se quiser)
+  _REGION: "us-central1"    # sua região (ajuste se preferir)
 
 steps:
+# build com Dockerfile explícito e contexto LR
 - name: 'gcr.io/cloud-builders/docker'
-  args: ['build', '-t', 'gcr.io/$PROJECT_ID/${_SERVICE}:$COMMIT_SHA', '.']
-  dir: 'LR'
+  args:
+    [
+      'build',
+      '-t', 'gcr.io/$PROJECT_ID/${_SERVICE}:$COMMIT_SHA',
+      '-f', 'LR/Dockerfile',
+      'LR'
+    ]
 
 - name: 'gcr.io/cloud-builders/docker'
   args: ['push', 'gcr.io/$PROJECT_ID/${_SERVICE}:$COMMIT_SHA']
