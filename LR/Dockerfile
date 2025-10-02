@@ -7,7 +7,10 @@ ENV PORT=8080
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y build-essential --no-install-recommends && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    --no-install-recommends && \
+    rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
@@ -16,5 +19,5 @@ COPY . .
 
 EXPOSE 8080
 
-# supondo que seu app Flask está em app.py com 'app' como variável
+# Executa via Gunicorn chamando app:app (arquivo app.py com variável app)
 CMD ["gunicorn", "-b", "0.0.0.0:8080", "app:app", "--workers", "2", "--threads", "4"]
