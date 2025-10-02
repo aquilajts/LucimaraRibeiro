@@ -14,5 +14,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# usar gunicorn para produção (supondo que seu app seja 'lele:app')
-CMD ["gunicorn", "-b", "0.0.0.0:8080", "lele:app", "--workers", "2", "--threads", "4"]
+# usar gunicorn para produção (supondo que seu app seja 'app:app')
+CMD ["gunicorn", "-b", "0.0.0.0:8080", "app:app", "--workers", "2", "--threads", "4"]
