@@ -42,8 +42,6 @@
 
         {% elif reset_senha %}
         <form method="POST" action="/esqueci_senha" class="login-form">
-            <input type="hidden" name="nome" value="{{ nome }}">
-            <input type="hidden" name="aniversario" value="{{ aniversario }}">
             <div class="form-group">
                 <label for="nova_senha">Nova Senha (mínimo 6 dígitos):</label>
                 <input type="password" id="nova_senha" name="nova_senha" required minlength="6">
@@ -89,7 +87,7 @@
         </div>
     </div>
 
-            <!-- Carrossel -->
+    <!-- Carrossel -->
     <div class="carousel">
       <div class="carousel-track">
         <!-- Bloco 1 -->
@@ -112,7 +110,7 @@
       </div>
     </div>
     
-        <!-- Rodapé -->
+    <!-- Rodapé -->
     <footer class="rodape">
         <p>© 2025 Estúdio Lucimara Ribeiro. Todos os direitos reservados.</p>
         <p>Desde 2007 - @LuRibeiroBeauty</p>
