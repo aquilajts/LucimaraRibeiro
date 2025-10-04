@@ -6,7 +6,14 @@ import os
 import zoneinfo
 
 # Configuração de logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('app.log')  # Salva logs em um arquivo para depuração
+    ]
+)
 logger = logging.getLogger(__name__)
 
 app = Flask(
@@ -35,17 +42,23 @@ TZ = zoneinfo.ZoneInfo("America/Sao_Paulo")
 
 # Funções Auxiliares
 def usuario_logado():
+    logger.debug("Verificando se usuário está logado: %s", "user" in session)
     return "user" in session
 
 def get_user():
-    return session.get("user")
+    user = session.get("user")
+    logger.debug("Obtendo usuário da sessão: %s", user)
+    return user
 
+# Rotas existentes (mantidas intactas)
 @app.route("/")
 def index():
+    logger.info("Acessando rota /index")
     return render_template("index.html", user=get_user())
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
+    logger.info("Acessando rota /login, método: %s", request.method)
     erro = None
     solicitar_aniversario = False
     reset_senha = False
@@ -55,16 +68,17 @@ def login():
     if request.method == "POST":
         nome = request.form.get("nome")
         senha = request.form.get("senha")
-        logger.info(f"Login tentativa - Nome: {nome}")
+        logger.info("Tentativa de login - Nome: %s", nome)
 
         if not nome or not senha:
             erro = "Preencha todos os campos."
-            logger.error(f"Erro no login: Campos vazios")
+            logger.error("Erro no login: Campos vazios")
         else:
             if supabase:
                 email = f"{nome.lower().replace(' ', '_')}@naildesigner.com"
+                logger.debug("Consultando cliente no Supabase - Nome_lower: %s, Email: %s", nome.lower(), email)
                 cliente = supabase.table("clientes").select("*").eq("nome_lower", nome.lower()).execute()
-                logger.info(f"Query cliente: {cliente.data}")
+                logger.debug("Resposta da query clientes: %s", cliente.data)
 
                 if cliente.data:
                     cliente = cliente.data[0]
@@ -72,14 +86,14 @@ def login():
                         if not cliente.get("aniversario"):
                             session["temp_user"] = cliente
                             solicitar_aniversario = True
-                            logger.info(f"Usuário {nome} sem aniversário, solicitando")
+                            logger.info("Usuário %s sem aniversário, solicitando", nome)
                         else:
                             session["user"] = cliente
-                            logger.info(f"Usuário {nome} logado com sucesso")
+                            logger.info("Usuário %s logado com sucesso", nome)
                             return redirect(url_for("agendamento"))
                     else:
                         erro = "Senha incorreta."
-                        logger.error(f"Erro no login: Senha incorreta para {nome}")
+                        logger.error("Erro no login: Senha incorreta para %s", nome)
                 else:
                     data = {
                         "nome": nome,
@@ -88,13 +102,14 @@ def login():
                         "telefone": None
                     }
                     try:
+                        logger.debug("Cadastrando novo usuário: %s", data)
                         novo = supabase.table("clientes").insert(data).execute()
                         session["temp_user"] = novo.data[0]
                         solicitar_aniversario = True
-                        logger.info(f"Novo usuário {nome} cadastrado")
+                        logger.info("Novo usuário %s cadastrado", nome)
                     except Exception as e:
                         erro = "Erro ao cadastrar usuário."
-                        logger.error(f"Erro ao cadastrar: {str(e)}")
+                        logger.error("Erro ao cadastrar: %s", str(e))
             else:
                 if nome == "demo" and senha == "123456":
                     session["user"] = {"nome": "Demo"}
@@ -104,6 +119,7 @@ def login():
                     erro = "Usuário demo inválido."
                     logger.error("Erro no login demo")
 
+    logger.debug("Renderizando login.html com erro: %s, solicitar_aniversario: %s", erro, solicitar_aniversario)
     return render_template("login.html", erro=erro,
                            solicitar_aniversario=solicitar_aniversario,
                            reset_senha=reset_senha,
@@ -112,17 +128,19 @@ def login():
 
 @app.route("/atualizar_aniversario", methods=["POST"])
 def atualizar_aniversario():
+    logger.info("Acessando rota /atualizar_aniversario")
     if "temp_user" not in session:
         logger.error("Sessão temp_user ausente")
         return redirect(url_for("login"))
 
     aniversario = request.form.get("aniversario")
     telefone = request.form.get("telefone")
-    logger.info(f"Atualizando aniversário: {aniversario}, telefone: {telefone}")
+    logger.info("Atualizando aniversário: %s, telefone: %s", aniversario, telefone)
 
     user = session["temp_user"]
     if supabase:
         try:
+            logger.debug("Atualizando cliente no Supabase - id_cliente: %s", user["id_cliente"])
             supabase.table("clientes").update({
                 "aniversario": aniversario,
                 "telefone": telefone
@@ -133,22 +151,21 @@ def atualizar_aniversario():
             session.pop("temp_user", None)
             logger.info("Usuário atualizado e temp_user removido")
         except Exception as e:
-            logger.error(f"Erro ao atualizar aniversário: {str(e)}")
+            logger.error("Erro ao atualizar aniversário: %s", str(e))
             return render_template("login.html", erro="Erro ao salvar dados.", supabase=supabase)
     return redirect(url_for("agendamento"))
 
 @app.route("/esqueci_senha", methods=["POST"])
 def esqueci_senha():
-    logger.info("Entrando em /esqueci_senha")
+    logger.info("Acessando rota /esqueci_senha")
     nova_senha = request.form.get("nova_senha")
-    logger.info(f"Nova senha presente: {bool(nova_senha)}")
+    logger.debug("Nova senha presente: %s", bool(nova_senha))
 
     nome = request.form.get("nome", "").strip().lower()
     aniversario = request.form.get("aniversario")
 
-    # Validar nome e aniversário na primeira etapa
     if not nova_senha:
-        logger.info(f"Do form - Nome: {nome}, Aniv: {aniversario}")
+        logger.info("Validação de nome e aniversário - Nome: %s, Aniversário: %s", nome, aniversario)
         if not nome or not aniversario:
             logger.error("Campos nome/aniv vazios")
             return jsonify({"success": False, "error": "Preencha todos os campos."})
@@ -158,27 +175,27 @@ def esqueci_senha():
             return jsonify({"success": False, "error": "Erro no servidor."})
 
         try:
+            logger.debug("Consultando cliente no Supabase - Nome_lower: %s", nome)
             cliente = supabase.table("clientes").select("*").eq("nome_lower", nome).execute()
-            logger.info(f"Query Supabase: {cliente.data}")
+            logger.debug("Resposta da query clientes: %s", cliente.data)
             if cliente.data:
                 cliente = cliente.data[0]
-                logger.info(f"Cliente encontrado: {cliente}")
+                logger.debug("Cliente encontrado: %s", cliente)
                 if str(cliente.get("aniversario")) == aniversario:
-                    logger.info("Validação bem-sucedida")
+                    logger.info("Validação bem-sucedida para %s", nome)
                     return jsonify({"success": True})
                 else:
-                    logger.error("Dados de aniversário não conferem")
+                    logger.error("Dados de aniversário não conferem para %s", nome)
                     return jsonify({"success": False, "error": "Dados não conferem."})
             else:
-                logger.error("Usuário não encontrado")
+                logger.error("Usuário não encontrado: %s", nome)
                 return jsonify({"success": False, "error": "Usuário não encontrado."})
         except Exception as e:
-            logger.error(f"Erro Supabase: {str(e)}")
+            logger.error("Erro Supabase em /esqueci_senha: %s", str(e))
             return jsonify({"success": False, "error": f"Erro no servidor: {str(e)}"})
 
-    # Redefinição de senha na segunda etapa
     else:
-        logger.info(f"Da sessão - Nome: {nome}, Aniv: {aniversario}")
+        logger.info("Redefinindo senha para Nome: %s, Aniversário: %s", nome, aniversario)
         if not nome or not aniversario:
             logger.error("Campos nome/aniv ausentes")
             return render_template("login.html", erro="Erro na recuperação de senha.", supabase=supabase)
@@ -188,29 +205,32 @@ def esqueci_senha():
             return jsonify({"success": False, "error": "Erro no servidor."})
 
         try:
+            logger.debug("Consultando cliente para redefinição de senha - Nome_lower: %s", nome)
             cliente = supabase.table("clientes").select("*").eq("nome_lower", nome).execute()
-            logger.info(f"Query Supabase: {cliente.data}")
+            logger.debug("Resposta da query clientes: %s", cliente.data)
             if cliente.data:
                 cliente = cliente.data[0]
                 if str(cliente.get("aniversario")) == aniversario:
                     if len(nova_senha) < 6:
-                        logger.error("Nova senha muito curta")
+                        logger.error("Nova senha muito curta para %s", nome)
                         return jsonify({"success": False, "error": "A nova senha deve ter pelo menos 6 dígitos."})
+                    logger.debug("Atualizando senha no Supabase - id_cliente: %s", cliente["id_cliente"])
                     supabase.table("clientes").update({"senha": nova_senha}).eq("id_cliente", cliente["id_cliente"]).execute()
-                    logger.info("Senha redefinida com sucesso")
+                    logger.info("Senha redefinida com sucesso para %s", nome)
                     return redirect(url_for("login", msg="Senha redefinida com sucesso."))
                 else:
-                    logger.error("Dados de aniversário não conferem")
+                    logger.error("Dados de aniversário não conferem para %s", nome)
                     return jsonify({"success": False, "error": "Dados não conferem."})
             else:
-                logger.error("Usuário não encontrado")
+                logger.error("Usuário não encontrado: %s", nome)
                 return jsonify({"success": False, "error": "Usuário não encontrado."})
         except Exception as e:
-            logger.error(f"Erro Supabase: {str(e)}")
+            logger.error("Erro Supabase em /esqueci_senha: %s", str(e))
             return jsonify({"success": False, "error": f"Erro no servidor: {str(e)}"})
 
 @app.route("/logout")
 def logout():
+    logger.info("Acessando rota /logout")
     session.clear()
     logger.info("Usuário deslogado")
     return redirect(url_for("index"))
@@ -218,50 +238,81 @@ def logout():
 # Rotas atualizadas para agendamento
 @app.route("/agendamento")
 def agendamento():
+    logger.info("Acessando rota /agendamento")
     if not usuario_logado():
         logger.error("Acesso não autorizado a /agendamento")
         return redirect(url_for("login", msg="Faça login para agendar."))
     min_date = (datetime.now(TZ) + timedelta(days=1)).strftime('%Y-%m-%d')
+    logger.debug("Renderizando agendamento.html com min_date: %s", min_date)
     return render_template("agendamento.html", user=get_user(), min_date=min_date)
 
 # API: Listar categorias distintas
 @app.route("/api/categorias")
 def api_categorias():
+    logger.info("Acessando API /api/categorias")
     if supabase:
-        categorias = supabase.table("servicos").select("categoria").eq("ativo", True).execute().data
-        unique_categorias = sorted(set(cat['categoria'] for cat in categorias if cat['categoria']))
-        return jsonify(unique_categorias)
+        try:
+            logger.debug("Consultando categorias no Supabase")
+            categorias = supabase.table("servicos").select("categoria").eq("ativo", True).execute().data
+            unique_categorias = sorted(set(cat['categoria'] for cat in categorias if cat['categoria']))
+            logger.debug("Categorias encontradas: %s", unique_categorias)
+            return jsonify(unique_categorias)
+        except Exception as e:
+            logger.error("Erro ao consultar categorias: %s", str(e))
+            return jsonify([]), 500
+    logger.warning("Supabase não inicializado, retornando lista vazia")
     return jsonify([])
 
 # API: Listar serviços por categoria
 @app.route("/api/servicos")
 def api_servicos():
     categoria = request.args.get('categoria')
+    logger.info("Acessando API /api/servicos com categoria: %s", categoria)
     if supabase and categoria:
-        servicos = supabase.table("servicos").select("id_servico, nome, duracao_minutos").eq("ativo", True).eq("categoria", categoria).execute().data
-        return jsonify(servicos)
+        try:
+            logger.debug("Consultando serviços no Supabase - Categoria: %s", categoria)
+            servicos = supabase.table("servicos").select("id_servico, nome, duracao_minutos").eq("ativo", True).eq("categoria", categoria).execute().data
+            logger.debug("Serviços encontrados: %s", servicos)
+            return jsonify(servicos)
+        except Exception as e:
+            logger.error("Erro ao consultar serviços: %s", str(e))
+            return jsonify([]), 500
+    logger.warning("Supabase não inicializado ou categoria não fornecida")
     return jsonify([])
 
 # API: Profissionais por serviço
 @app.route("/api/profissionais/<int:id_servico>")
 def api_profissionais(id_servico):
+    logger.info("Acessando API /api/profissionais/%s", id_servico)
     if supabase:
-        profs = supabase.from_("profissionais_servicos").select("profissionais!inner(id_profissional, nome)").eq("id_servico", id_servico).eq("profissionais.ativo", True).execute().data
-        return jsonify([p['profissionais'] for p in profs])
+        try:
+            logger.debug("Consultando profissionais para serviço %s", id_servico)
+            profs = supabase.from_("profissionais_servicos").select("profissionais!inner(id_profissional, nome)").eq("id_servico", id_servico).eq("profissionais.ativo", True).execute().data
+            result = [p['profissionais'] for p in profs]
+            logger.debug("Profissionais encontrados: %s", result)
+            return jsonify(result)
+        except Exception as e:
+            logger.error("Erro ao consultar profissionais: %s", str(e))
+            return jsonify([]), 500
+    logger.warning("Supabase não inicializado")
     return jsonify([])
 
 # API: Horários disponíveis
 @app.route("/api/horarios_disponiveis/<int:id_profissional>/<data>/<int:id_servico>")
 def api_horarios_disponiveis(id_profissional, data, id_servico):
+    logger.info("Acessando API /api/horarios_disponiveis/%s/%s/%s", id_profissional, data, id_servico)
     if not supabase:
+        logger.warning("Supabase não inicializado")
         return jsonify([])
 
     try:
-        # Pegar dados do profissional e serviço
+        logger.debug("Consultando profissional %s", id_profissional)
         prof = supabase.table("profissionais").select("horario_inicio, horario_fim, dias_trabalho").eq("id_profissional", id_profissional).single().execute().data
+        logger.debug("Consultando serviço %s", id_servico)
         servico = supabase.table("servicos").select("duracao_minutos").eq("id_servico", id_servico).single().execute().data
 
         if not prof or not servico:
+            logger.error("Profissional ou serviço não encontrado")
             return jsonify([])
 
         duracao = servico['duracao_minutos']
@@ -270,8 +321,10 @@ def api_horarios_disponiveis(id_profissional, data, id_servico):
         data_dt = datetime.strptime(data, '%Y-%m-%d').date()
         dia_semana = data_dt.strftime('%A').lower()
         dia_pt = {'monday': 'segunda', 'tuesday': 'terca', 'wednesday': 'quarta', 'thursday': 'quinta', 'friday': 'sexta', 'saturday': 'sabado', 'sunday': 'domingo'}[dia_semana]
+        logger.debug("Dia da semana: %s, Dias de trabalho do profissional: %s", dia_pt, prof['dias_trabalho'])
 
         if dia_pt not in prof['dias_trabalho']:
+            logger.info("Profissional não trabalha no dia: %s", dia_pt)
             return jsonify([])
 
         # Gerar slots possíveis (intervalos de 15min)
@@ -281,16 +334,21 @@ def api_horarios_disponiveis(id_profissional, data, id_servico):
         while current + timedelta(minutes=duracao) <= end:
             slots.append(current.strftime('%H:%M'))
             current += timedelta(minutes=15)
+        logger.debug("Slots possíveis gerados: %s", slots)
 
         # Pegar agendamentos existentes
+        logger.debug("Consultando agendamentos para profissional %s na data %s", id_profissional, data)
         agends = supabase.table("agendamentos").select("hora_agendamento, id_servico").eq("id_profissional", id_profissional).eq("data_agendamento", data).eq("status", "pendente").execute().data
+        logger.debug("Agendamentos encontrados: %s", agends)
 
         occupied = []
         for ag in agends:
             hora_start = datetime.strptime(ag['hora_agendamento'], '%H:%M')
+            logger.debug("Consultando duração do serviço %s", ag['id_servico'])
             serv_dur = supabase.table("servicos").select("duracao_minutos").eq("id_servico", ag['id_servico']).single().execute().data['duracao_minutos']
             hora_end = hora_start + timedelta(minutes=serv_dur)
             occupied.append((hora_start, hora_end))
+        logger.debug("Horários ocupados: %s", occupied)
 
         # Filtrar slots livres
         disponiveis = []
@@ -304,21 +362,26 @@ def api_horarios_disponiveis(id_profissional, data, id_servico):
                     break
             if livre:
                 disponiveis.append(slot)
+        logger.debug("Horários disponíveis: %s", disponiveis)
 
         return jsonify(disponiveis)
     except Exception as e:
-        logger.error(f"Erro ao calcular horários: {str(e)}")
-        return jsonify([])
+        logger.error("Erro ao calcular horários: %s", str(e))
+        return jsonify([]), 500
 
 # API: Salvar agendamento
 @app.route("/api/agendar", methods=["POST"])
 def api_agendar():
+    logger.info("Acessando API /api/agendar")
     if not usuario_logado():
+        logger.error("Usuário não autenticado")
         return jsonify({"success": False, "error": "Não autenticado"}), 401
 
     data = request.json
+    logger.debug("Dados recebidos para agendamento: %s", data)
     required = ['id_servico', 'id_profissional', 'data_agendamento', 'hora_agendamento']
     if not all(k in data for k in required):
+        logger.error("Campos obrigatórios faltando: %s", required)
         return jsonify({"success": False, "error": "Campos obrigatórios faltando"}), 400
 
     new_agend = {
@@ -331,14 +394,18 @@ def api_agendar():
         'observacoes': data.get('observacoes', ''),
         'created_at': datetime.now(TZ).isoformat()
     }
+    logger.debug("Novo agendamento a ser inserido: %s", new_agend)
 
     try:
+        logger.debug("Inserindo agendamento no Supabase")
         supabase.table('agendamentos').insert(new_agend).execute()
+        logger.info("Agendamento salvo com sucesso")
         return jsonify({"success": True})
     except Exception as e:
-        logger.error(f"Erro ao agendar: {str(e)}")
+        logger.error("Erro ao agendar: %s", str(e))
         return jsonify({"success": False, "error": "Erro ao salvar agendamento"}), 500
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
+    logger.info("Iniciando servidor na porta %s", port)
     app.run(host="0.0.0.0", port=port)
