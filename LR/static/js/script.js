@@ -38,16 +38,16 @@ document.querySelectorAll('input, textarea, select').forEach(input => {
 /* =========================
    LOADING NOS BOTÕES
 ========================= */
-document.querySelectorAll('form').forEach(form => {
-    form.addEventListener('submit', function () {
+function applyLoadingEffect(form) {
+    form.addEventListener('submit', function (event) {
         const btn = this.querySelector('.btn:not(.btn-secondary)');
-        if (btn) {
+        if (btn && !event.defaultPrevented) {
             btn.dataset.originalText = btn.innerHTML;
-            btn.innerHTML = '⏳ Carregando...';
+            btn.innerHTML = this.action.includes('esqueci_senha') && document.getElementById('nova_senha') ? 'Redefinindo...' : '⏳ Carregando...';
             btn.disabled = true;
         }
     });
-});
+}
 
 /* =========================
    VALIDAÇÃO FORMULÁRIOS
@@ -65,6 +65,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // LOGIN
     const loginForm = document.querySelector('form[action="/login"]');
     if (loginForm) {
+        applyLoadingEffect(loginForm);
         loginForm.addEventListener('submit', function (event) {
             const nome = document.getElementById('nome').value.trim();
             const senha = document.getElementById('senha').value;
@@ -84,6 +85,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // ESQUECI SENHA (modal ou redefinição)
     const recuperarSenhaForm = document.querySelector('form[action="/esqueci_senha"]');
     if (recuperarSenhaForm) {
+        applyLoadingEffect(recuperarSenhaForm);
         recuperarSenhaForm.addEventListener('submit', function(event) {
             const nomeField = document.getElementById('modal_nome');
             const aniversarioField = document.getElementById('modal_aniversario');
@@ -114,13 +116,6 @@ document.addEventListener('DOMContentLoaded', function () {
                     return;
                 }
             }
-
-            // Se passar em todas as validações, botão mostra carregando
-            const btn = this.querySelector('.btn');
-            if (btn) {
-                btn.innerHTML = novaSenhaField ? 'Redefinindo...' : '⏳ Carregando...';
-                btn.disabled = true;
-            }
         });
     }
 });
@@ -134,7 +129,6 @@ function resetButton(form, novaSenha = false) {
         btn.innerHTML = btn.dataset.originalText;
         btn.disabled = false;
     } else if (btn) {
-        // Fallback caso não tenha dataset salvo
         btn.innerHTML = novaSenha ? 'Redefinir Senha' : 'Verificar';
         btn.disabled = false;
     }
