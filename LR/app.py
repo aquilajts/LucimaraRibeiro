@@ -205,6 +205,19 @@ def esqueci_senha():
             logger.error(f"Erro Supabase: {str(e)}")
             return jsonify({"success": False, "error": f"Erro no servidor: {str(e)}"})
 
+@app.route("/logout")
+def logout():
+    session.clear()
+    logger.info("Usuário deslogado")
+    return redirect(url_for("index"))
+
+@app.route("/agendamento")
+def agendamento():
+    if not usuario_logado():
+        logger.error("Acesso não autorizado a /agendamento")
+        return redirect(url_for("login", msg="Faça login para agendar."))
+    return render_template("agendamento.html", user=get_user())
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
