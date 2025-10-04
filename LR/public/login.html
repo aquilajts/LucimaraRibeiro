@@ -40,9 +40,9 @@
             <button type="submit" class="btn">Salvar e Continuar</button>
         </form>
 
-        {% elif reset_senha %}
+        {% elif reset_senha and reset_nome %}
         <form method="POST" action="/esqueci_senha" class="login-form">
-            <input type="hidden" name="nome" value="{{ session.get('reset_nome', '') }}">
+            <input type="hidden" name="nome" value="{{ reset_nome }}" aria-hidden="true">
             <div class="form-group">
                 <label for="nova_senha">Nova Senha (mínimo 6 dígitos):</label>
                 <input type="password" id="nova_senha" name="nova_senha" required minlength="6" autocomplete="new-password">
