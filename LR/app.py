@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, session, url_for
+from flask import Flask, render_template, request, redirect, session, url_for, jsonify
 import logging
 from supabase import create_client, Client
 from datetime import datetime
@@ -18,7 +18,16 @@ app.secret_key = os.getenv('SECRET_KEY', 'nail_designer_lucimara_2025')
 # Config Supabase
 url = os.getenv("SUPABASE_URL")
 key = os.getenv("SUPABASE_KEY")
-supabase: Client = create_client(url, key) if url and key else None
+if not url or not key:
+    logger.error("SUPABASE_URL ou SUPABASE_KEY não configurados")
+    supabase = None
+else:
+    try:
+        supabase: Client = create_client(url, key)
+        logger.info("Conexão com Supabase estabelecida")
+    except Exception as e:
+        logger.error(f"Falha ao conectar ao Supabase: {str(e)}")
+        supabase = None
 
 # Funções Auxiliares
 def usuario_logado():
@@ -27,7 +36,6 @@ def usuario_logado():
 def get_user():
     return session.get("user")
 
-# Rotas principais
 @app.route("/")
 def index():
     return render_template("index.html", user=get_user())
@@ -141,11 +149,16 @@ def esqueci_senha():
             logger.error("Campos nome/aniv vazios")
             return jsonify({"success": False, "error": "Preencha todos os campos."})
 
+        if not supabase:
+            logger.error("Supabase não inicializado")
+            return jsonify({"success": False, "error": "Erro no servidor."})
+
         try:
             cliente = supabase.table("clientes").select("*").eq("nome_lower", nome).execute()
-            logger.info(f"Query cliente: {cliente.data}")
+            logger.info(f"Query Supabase: {cliente.data}")
             if cliente.data:
                 cliente = cliente.data[0]
+                logger.info(f"Cliente encontrado: {cliente}")
                 if str(cliente.get("aniversario")) == aniversario:
                     logger.info("Validação bem-sucedida")
                     return jsonify({"success": True})
@@ -157,7 +170,7 @@ def esqueci_senha():
                 return jsonify({"success": False, "error": "Usuário não encontrado."})
         except Exception as e:
             logger.error(f"Erro Supabase: {str(e)}")
-            return jsonify({"success": False, "error": "Erro no servidor."})
+            return jsonify({"success": False, "error": f"Erro no servidor: {str(e)}"})
 
     # Redefinição de senha na segunda etapa
     else:
@@ -166,9 +179,13 @@ def esqueci_senha():
             logger.error("Campos nome/aniv ausentes")
             return render_template("login.html", erro="Erro na recuperação de senha.", supabase=supabase)
 
+        if not supabase:
+            logger.error("Supabase não inicializado")
+            return jsonify({"success": False, "error": "Erro no servidor."})
+
         try:
             cliente = supabase.table("clientes").select("*").eq("nome_lower", nome).execute()
-            logger.info(f"Query cliente: {cliente.data}")
+            logger.info(f"Query Supabase: {cliente.data}")
             if cliente.data:
                 cliente = cliente.data[0]
                 if str(cliente.get("aniversario")) == aniversario:
@@ -186,20 +203,7 @@ def esqueci_senha():
                 return jsonify({"success": False, "error": "Usuário não encontrado."})
         except Exception as e:
             logger.error(f"Erro Supabase: {str(e)}")
-            return jsonify({"success": False, "error": "Erro no servidor."})
-
-@app.route("/logout")
-def logout():
-    session.clear()
-    logger.info("Usuário deslogado")
-    return redirect(url_for("index"))
-
-@app.route("/agendamento")
-def agendamento():
-    if not usuario_logado():
-        logger.error("Acesso não autorizado a /agendamento")
-        return redirect(url_for("login", msg="Faça login para agendar."))
-    return render_template("agendamento.html", user=get_user())
+            return jsonify({"success": False, "error": f"Erro no servidor: {str(e)}"})
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
