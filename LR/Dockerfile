@@ -1,23 +1,28 @@
 # LR/Dockerfile
 FROM python:3.11-slim
 
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-ENV PORT=8080
+# Variáveis de ambiente
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PORT=8080 \
+    PIP_NO_CACHE_DIR=1
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y \
+# Instala apenas dependências essenciais
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    --no-install-recommends && \
-    rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/*
 
+# Copia e instala dependências primeiro (para usar cache de camadas)
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install -r requirements.txt
 
+# Copia o restante do projeto
 COPY . .
 
+# Exponha a porta
 EXPOSE 8080
 
-# Executa via Gunicorn chamando app:app (arquivo app.py com variável app)
-CMD ["gunicorn", "-b", "0.0.0.0:8080", "app:app", "--workers", "2", "--threads", "4"]
+# Inicia o app com Gunicorn
+CMD ["gunicorn", "-b", "0.0.0.0:8080", "app:app", "--workers=2", "--threads=4"]
