@@ -215,20 +215,30 @@ def logout():
     logger.info("Usuário deslogado")
     return redirect(url_for("index"))
 
+# Rotas atualizadas para agendamento
 @app.route("/agendamento")
 def agendamento():
     if not usuario_logado():
         logger.error("Acesso não autorizado a /agendamento")
         return redirect(url_for("login", msg="Faça login para agendar."))
-    # Data mínima: amanhã
     min_date = (datetime.now(TZ) + timedelta(days=1)).strftime('%Y-%m-%d')
     return render_template("agendamento.html", user=get_user(), min_date=min_date)
 
-# API: Listar serviços ativos
+# API: Listar categorias distintas
+@app.route("/api/categorias")
+def api_categorias():
+    if supabase:
+        categorias = supabase.table("servicos").select("categoria").eq("ativo", True).execute().data
+        unique_categorias = sorted(set(cat['categoria'] for cat in categorias if cat['categoria']))
+        return jsonify(unique_categorias)
+    return jsonify([])
+
+# API: Listar serviços por categoria
 @app.route("/api/servicos")
 def api_servicos():
-    if supabase:
-        servicos = supabase.table("servicos").select("id_servico, nome, duracao_minutos").eq("ativo", True).execute().data
+    categoria = request.args.get('categoria')
+    if supabase and categoria:
+        servicos = supabase.table("servicos").select("id_servico, nome, duracao_minutos").eq("ativo", True).eq("categoria", categoria).execute().data
         return jsonify(servicos)
     return jsonify([])
 
@@ -240,61 +250,65 @@ def api_profissionais(id_servico):
         return jsonify([p['profissionais'] for p in profs])
     return jsonify([])
 
-# API: Horários disponíveis para profissional, data e serviço
+# API: Horários disponíveis
 @app.route("/api/horarios_disponiveis/<int:id_profissional>/<data>/<int:id_servico>")
 def api_horarios_disponiveis(id_profissional, data, id_servico):
     if not supabase:
         return jsonify([])
 
-    # Pegar dados do profissional e serviço
-    prof = supabase.table("profissionais").select("horario_inicio, horario_fim, dias_trabalho").eq("id_profissional", id_profissional).single().execute().data
-    servico = supabase.table("servicos").select("duracao_minutos").eq("id_servico", id_servico).single().execute().data
+    try:
+        # Pegar dados do profissional e serviço
+        prof = supabase.table("profissionais").select("horario_inicio, horario_fim, dias_trabalho").eq("id_profissional", id_profissional).single().execute().data
+        servico = supabase.table("servicos").select("duracao_minutos").eq("id_servico", id_servico).single().execute().data
 
-    if not prof or not servico:
+        if not prof or not servico:
+            return jsonify([])
+
+        duracao = servico['duracao_minutos']
+        inicio = datetime.strptime(prof['horario_inicio'], '%H:%M').time()
+        fim = datetime.strptime(prof['horario_fim'], '%H:%M').time()
+        data_dt = datetime.strptime(data, '%Y-%m-%d').date()
+        dia_semana = data_dt.strftime('%A').lower()
+        dia_pt = {'monday': 'segunda', 'tuesday': 'terca', 'wednesday': 'quarta', 'thursday': 'quinta', 'friday': 'sexta', 'saturday': 'sabado', 'sunday': 'domingo'}[dia_semana]
+
+        if dia_pt not in prof['dias_trabalho']:
+            return jsonify([])
+
+        # Gerar slots possíveis (intervalos de 15min)
+        slots = []
+        current = datetime.combine(data_dt, inicio)
+        end = datetime.combine(data_dt, fim)
+        while current + timedelta(minutes=duracao) <= end:
+            slots.append(current.strftime('%H:%M'))
+            current += timedelta(minutes=15)
+
+        # Pegar agendamentos existentes
+        agends = supabase.table("agendamentos").select("hora_agendamento, id_servico").eq("id_profissional", id_profissional).eq("data_agendamento", data).eq("status", "pendente").execute().data
+
+        occupied = []
+        for ag in agends:
+            hora_start = datetime.strptime(ag['hora_agendamento'], '%H:%M')
+            serv_dur = supabase.table("servicos").select("duracao_minutos").eq("id_servico", ag['id_servico']).single().execute().data['duracao_minutos']
+            hora_end = hora_start + timedelta(minutes=serv_dur)
+            occupied.append((hora_start, hora_end))
+
+        # Filtrar slots livres
+        disponiveis = []
+        for slot in slots:
+            slot_start = datetime.strptime(slot, '%H:%M')
+            slot_end = slot_start + timedelta(minutes=duracao)
+            livre = True
+            for occ_start, occ_end in occupied:
+                if not (slot_end <= occ_start or slot_start >= occ_end):
+                    livre = False
+                    break
+            if livre:
+                disponiveis.append(slot)
+
+        return jsonify(disponiveis)
+    except Exception as e:
+        logger.error(f"Erro ao calcular horários: {str(e)}")
         return jsonify([])
-
-    duracao = servico['duracao_minutos']
-    inicio = datetime.strptime(prof['horario_inicio'], '%H:%M').time()
-    fim = datetime.strptime(prof['horario_fim'], '%H:%M').time()
-    data_dt = datetime.strptime(data, '%Y-%m-%d').date()
-    dia_semana = data_dt.strftime('%A').lower()  # ex: 'monday' -> ajuste para pt: 'segunda', etc.
-    dia_pt = {'monday': 'segunda', 'tuesday': 'terca', 'wednesday': 'quarta', 'thursday': 'quinta', 'friday': 'sexta', 'saturday': 'sabado', 'sunday': 'domingo'}[dia_semana]
-
-    if dia_pt not in prof['dias_trabalho']:
-        return jsonify([])  # Não trabalha nesse dia
-
-    # Gerar slots possíveis (a cada 15min, mas checar duração)
-    slots = []
-    current = datetime.combine(data_dt, inicio)
-    end = datetime.combine(data_dt, fim)
-    while current + timedelta(minutes=duracao) <= end:
-        slots.append(current.strftime('%H:%M'))
-        current += timedelta(minutes=15)  # Intervalo de slots
-
-    # Pegar agendamentos existentes no dia
-    agends = supabase.table("agendamentos").select("hora_agendamento, id_servico").eq("id_profissional", id_profissional).eq("data_agendamento", data).eq("status", "pendente").execute().data  # Assumindo 'pendente' ou 'confirmado'
-
-    occupied = []
-    for ag in agends:
-        hora_start = datetime.strptime(ag['hora_agendamento'], '%H:%M')
-        serv_dur = supabase.table("servicos").select("duracao_minutos").eq("id_servico", ag['id_servico']).single().execute().data['duracao_minutos']
-        hora_end = hora_start + timedelta(minutes=serv_dur)
-        occupied.append((hora_start, hora_end))
-
-    # Filtrar slots livres
-    disponiveis = []
-    for slot in slots:
-        slot_start = datetime.strptime(slot, '%H:%M')
-        slot_end = slot_start + timedelta(minutes=duracao)
-        livre = True
-        for occ_start, occ_end in occupied:
-            if not (slot_end <= occ_start or slot_start >= occ_end):
-                livre = False
-                break
-        if livre:
-            disponiveis.append(slot)
-
-    return jsonify(disponiveis)
 
 # API: Salvar agendamento
 @app.route("/api/agendar", methods=["POST"])
