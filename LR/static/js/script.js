@@ -125,7 +125,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                     body: new URLSearchParams({
-                        'nome': nameField.value.trim().toLowerCase(),
+                        'nome': nomeField.value.trim().toLowerCase(),
                         'aniversario': aniversarioField.value
                     })
                 })
