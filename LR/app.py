@@ -120,11 +120,11 @@ def login():
                     logger.error("Erro no login demo")
 
     logger.debug("Renderizando login.html com erro: %s, solicitar_aniversario: %s", erro, solicitar_aniversario)
-    return render_template("login.html", erro=erro,
-                           solicitar_aniversario=solicitar_aniversario,
-                           reset_senha=reset_senha,
-                           nome=nome, aniversario=aniversario,
-                           supabase=supabase)
+    return jsonify(erro=erro,
+                   solicitar_aniversario=solicitar_aniversario,
+                   reset_senha=reset_senha,
+                   nome=nome, aniversario=aniversario,
+                   supabase=supabase)
 
 @app.route("/atualizar_aniversario", methods=["POST"])
 def atualizar_aniversario():
@@ -152,7 +152,7 @@ def atualizar_aniversario():
             logger.info("Usuário atualizado e temp_user removido")
         except Exception as e:
             logger.error("Erro ao atualizar aniversário: %s", str(e))
-            return render_template("login.html", erro="Erro ao salvar dados.", supabase=supabase)
+            return jsonify(erro="Erro ao salvar dados.", supabase=supabase)
     return redirect(url_for("agendamento"))
 
 @app.route("/esqueci_senha", methods=["POST"])
@@ -198,7 +198,7 @@ def esqueci_senha():
         logger.info("Redefinindo senha para Nome: %s, Aniversário: %s", nome, aniversario)
         if not nome or not aniversario:
             logger.error("Campos nome/aniv ausentes")
-            return render_template("login.html", erro="Erro na recuperação de senha.", supabase=supabase)
+            return jsonify(erro="Erro na recuperação de senha.", supabase=supabase)
 
         if not supabase:
             logger.error("Supabase não inicializado")
