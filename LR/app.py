@@ -131,56 +131,62 @@ def esqueci_senha():
     nova_senha = request.form.get("nova_senha")
     logger.info(f"Nova senha presente: {bool(nova_senha)}")
 
-    # Separar lógica de verificação inicial e redefinição de senha
-    if nova_senha:
-        # Etapa de redefinição de senha
-        nome = session.get("reset_nome")
-        aniversario = session.get("reset_aniversario")
+    nome = request.form.get("nome", "").strip().lower()
+    aniversario = request.form.get("aniversario")
+
+    # Validar nome e aniversário na primeira etapa
+    if not nova_senha:
+        logger.info(f"Do form - Nome: {nome}, Aniv: {aniversario}")
+        if not nome or not aniversario:
+            logger.error("Campos nome/aniv vazios")
+            return jsonify({"success": False, "error": "Preencha todos os campos."})
+
+        try:
+            cliente = supabase.table("clientes").select("*").eq("nome_lower", nome).execute()
+            logger.info(f"Query cliente: {cliente.data}")
+            if cliente.data:
+                cliente = cliente.data[0]
+                if str(cliente.get("aniversario")) == aniversario:
+                    logger.info("Validação bem-sucedida")
+                    return jsonify({"success": True})
+                else:
+                    logger.error("Dados de aniversário não conferem")
+                    return jsonify({"success": False, "error": "Dados não conferem."})
+            else:
+                logger.error("Usuário não encontrado")
+                return jsonify({"success": False, "error": "Usuário não encontrado."})
+        except Exception as e:
+            logger.error(f"Erro Supabase: {str(e)}")
+            return jsonify({"success": False, "error": "Erro no servidor."})
+
+    # Redefinição de senha na segunda etapa
+    else:
         logger.info(f"Da sessão - Nome: {nome}, Aniv: {aniversario}")
         if not nome or not aniversario:
-            logger.error("Sessão reset ausente")
-            return render_template("login.html", erro="Sessão expirada. Tente recuperar a senha novamente.", supabase=supabase)
-    else:
-        # Etapa inicial de verificação
-        nome = request.form.get("nome", "").strip().lower()
-        aniversario = request.form.get("aniversario")
-        logger.info(f"Do form - Nome: {nome}, Aniv: {aniversario}")
-        session["reset_nome"] = nome
-        session["reset_aniversario"] = aniversario
-        logger.info("Sessão reset setada")
+            logger.error("Campos nome/aniv ausentes")
+            return render_template("login.html", erro="Erro na recuperação de senha.", supabase=supabase)
 
-    # Validar nome e aniversário apenas na etapa inicial
-    if not nova_senha and (not nome or not aniversario):
-        logger.error("Campos nome/aniv vazios")
-        return render_template("login.html", erro="Preencha todos os campos.", supabase=supabase)
-
-    try:
-        cliente = supabase.table("clientes").select("*").eq("nome_lower", nome).execute()
-        logger.info(f"Query cliente: {cliente.data}")
-        if cliente.data:
-            cliente = cliente.data[0]
-            if str(cliente.get("aniversario")) == aniversario:
-                if nova_senha:
+        try:
+            cliente = supabase.table("clientes").select("*").eq("nome_lower", nome).execute()
+            logger.info(f"Query cliente: {cliente.data}")
+            if cliente.data:
+                cliente = cliente.data[0]
+                if str(cliente.get("aniversario")) == aniversario:
                     if len(nova_senha) < 6:
                         logger.error("Nova senha muito curta")
-                        return render_template("login.html", erro="A nova senha deve ter pelo menos 6 dígitos.", reset_senha=True, reset_nome=nome, supabase=supabase)
+                        return jsonify({"success": False, "error": "A nova senha deve ter pelo menos 6 dígitos."})
                     supabase.table("clientes").update({"senha": nova_senha}).eq("id_cliente", cliente["id_cliente"]).execute()
-                    session.pop("reset_nome", None)
-                    session.pop("reset_aniversario", None)
                     logger.info("Senha redefinida com sucesso")
                     return redirect(url_for("login", msg="Senha redefinida com sucesso."))
                 else:
-                    logger.info("Validação bem-sucedida, renderizando form de nova senha")
-                    return render_template("login.html", reset_senha=True, reset_nome=nome, supabase=supabase)
+                    logger.error("Dados de aniversário não conferem")
+                    return jsonify({"success": False, "error": "Dados não conferem."})
             else:
-                logger.error("Dados de aniversário não conferem")
-                return render_template("login.html", erro="Dados não conferem.", supabase=supabase)
-        else:
-            logger.error("Usuário não encontrado")
-            return render_template("login.html", erro="Usuário não encontrado.", supabase=supabase)
-    except Exception as e:
-        logger.error(f"Erro Supabase: {str(e)}")
-        return render_template("login.html", erro="Erro no servidor.", supabase=supabase)
+                logger.error("Usuário não encontrado")
+                return jsonify({"success": False, "error": "Usuário não encontrado."})
+        except Exception as e:
+            logger.error(f"Erro Supabase: {str(e)}")
+            return jsonify({"success": False, "error": "Erro no servidor."})
 
 @app.route("/logout")
 def logout():
