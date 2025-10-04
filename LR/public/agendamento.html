@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
     <script src="{{ url_for('static', filename='js/script.js') }}" defer></script>
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='logo.png') }}" />
+    <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&display=swap" rel="stylesheet">
 </head>
 <body>
     <!-- Hero -->
@@ -14,22 +15,35 @@
         <div class="logo-container">
             <img src="{{ url_for('static', filename='logo.png') }}" alt="Lucimara Ribeiro Logo" class="logo">
         </div>
+        <div class="subtitle">Estúdio Lucimara Ribeiro</div>
     </header>
 
     <!-- Container do Formulário -->
-    <div class="container form-container">
+    <div class="form-container">
         <h2>Agendar Serviço</h2>
 
         {% if request.args.get('msg') %}
         <div class="success">{{ request.args.get('msg') }}</div>
         {% endif %}
 
+        {% if erro %}
+        <div class="alert error">{{ erro }}</div>
+        {% endif %}
+
         <form id="agendamento-form" method="POST">
             <div class="form-group">
+                <label for="categoria">Categoria do Serviço:</label>
+                <select id="categoria" name="categoria" required>
+                    <option value="">-- Escolha uma Categoria --</option>
+                    <!-- Carregado via JS -->
+                </select>
+            </div>
+
+            <div class="form-group" id="servico-group" style="display: none;">
                 <label for="servico">Selecione o Serviço:</label>
                 <select id="servico" name="id_servico" required>
                     <option value="">-- Escolha um Serviço --</option>
-                    <!-- Opções carregadas via JS -->
+                    <!-- Carregado via JS -->
                 </select>
             </div>
 
@@ -37,7 +51,7 @@
                 <label for="profissional">Selecione o Profissional:</label>
                 <select id="profissional" name="id_profissional" required>
                     <option value="">-- Escolha um Profissional --</option>
-                    <!-- Opções carregadas via JS -->
+                    <!-- Carregado via JS -->
                 </select>
             </div>
 
@@ -50,7 +64,7 @@
                 <label for="hora">Horários Disponíveis:</label>
                 <select id="hora" name="hora_agendamento" required>
                     <option value="">-- Escolha um Horário --</option>
-                    <!-- Opções carregadas via JS -->
+                    <!-- Carregado via JS -->
                 </select>
             </div>
 
