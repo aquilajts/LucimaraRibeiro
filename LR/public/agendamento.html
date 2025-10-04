@@ -24,34 +24,42 @@
         <div class="success">{{ request.args.get('msg') }}</div>
         {% endif %}
 
-        <form method="POST" action="/salvar_agendamento">
+        <form id="agendamento-form" method="POST">
             <div class="form-group">
                 <label for="servico">Selecione o Serviço:</label>
-                <select id="servico" name="servico" required>
-                    <option value="">-- Escolha --</option>
-                    <option value="1">💅 Manicure</option>
-                    <option value="2">🦶 Pedicure</option>
-                    <option value="3">🎨 Spa e Plástica dos Pés</option>
-                    <option value="4">✨ Sobrancelha</option>
+                <select id="servico" name="id_servico" required>
+                    <option value="">-- Escolha um Serviço --</option>
+                    <!-- Opções carregadas via JS -->
+                </select>
+            </div>
+
+            <div class="form-group" id="profissional-group" style="display: none;">
+                <label for="profissional">Selecione o Profissional:</label>
+                <select id="profissional" name="id_profissional" required>
+                    <option value="">-- Escolha um Profissional --</option>
+                    <!-- Opções carregadas via JS -->
+                </select>
+            </div>
+
+            <div class="form-group" id="data-group" style="display: none;">
+                <label for="data">Selecione a Data:</label>
+                <input type="date" id="data" name="data_agendamento" required min="{{ min_date }}">
+            </div>
+
+            <div class="form-group" id="hora-group" style="display: none;">
+                <label for="hora">Horários Disponíveis:</label>
+                <select id="hora" name="hora_agendamento" required>
+                    <option value="">-- Escolha um Horário --</option>
+                    <!-- Opções carregadas via JS -->
                 </select>
             </div>
 
             <div class="form-group">
-                <label for="data">Data:</label>
-                <input type="date" id="data" name="data" required>
-            </div>
-
-            <div class="form-group">
-                <label for="hora">Horário:</label>
-                <input type="time" id="hora" name="hora" required>
-            </div>
-
-            <div class="form-group">
                 <label for="obs">Observações:</label>
-                <textarea id="obs" name="obs" rows="3"></textarea>
+                <textarea id="obs" name="observacoes" rows="3"></textarea>
             </div>
 
-            <button type="submit" class="btn">Agendar</button>
+            <button type="submit" class="btn" disabled>Agendar</button>
         </form>
     </div>
 
@@ -65,7 +73,6 @@
             <img src="{{ url_for('static', filename='nail5.jpg') }}" alt="Nail 5">
             <img src="{{ url_for('static', filename='nail6.jpg') }}" alt="Nail 6">
             <img src="{{ url_for('static', filename='nail7.jpg') }}" alt="Nail 7">
-
             <!-- Duplicado para rolagem contínua -->
             <img src="{{ url_for('static', filename='nail1.jpg') }}" alt="Nail 1">
             <img src="{{ url_for('static', filename='nail2.jpg') }}" alt="Nail 2">
@@ -82,6 +89,5 @@
         <p>© 2025 Estúdio Lucimara Ribeiro. Todos os direitos reservados.</p>
         <p>Desde 2007 - @LuRibeiroBeauty</p>
     </footer>
-
 </body>
 </html>
