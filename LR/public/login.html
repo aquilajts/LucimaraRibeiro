@@ -44,7 +44,7 @@
         <form method="POST" action="/esqueci_senha" class="login-form">
             <div class="form-group">
                 <label for="nova_senha">Nova Senha (mínimo 6 dígitos):</label>
-                <input type="password" id="nova_senha" name="nova_senha" required minlength="6">
+                <input type="password" id="nova_senha" name="nova_senha" required minlength="6" autocomplete="new-password">
             </div>
             <button type="submit" class="btn">Redefinir Senha</button>
         </form>
@@ -90,7 +90,6 @@
     <!-- Carrossel -->
     <div class="carousel">
       <div class="carousel-track">
-        <!-- Bloco 1 -->
         <img src="{{ url_for('static', filename='nail1.jpg') }}" alt="Nail 1">
         <img src="{{ url_for('static', filename='nail2.jpg') }}" alt="Nail 2">
         <img src="{{ url_for('static', filename='nail3.jpg') }}" alt="Nail 3">
@@ -98,8 +97,6 @@
         <img src="{{ url_for('static', filename='nail5.jpg') }}" alt="Nail 5">
         <img src="{{ url_for('static', filename='nail6.jpg') }}" alt="Nail 6">
         <img src="{{ url_for('static', filename='nail7.jpg') }}" alt="Nail 7">
-    
-        <!-- Bloco 2 (duplicado) -->
         <img src="{{ url_for('static', filename='nail1.jpg') }}" alt="Nail 1">
         <img src="{{ url_for('static', filename='nail2.jpg') }}" alt="Nail 2">
         <img src="{{ url_for('static', filename='nail3.jpg') }}" alt="Nail 3">
@@ -109,7 +106,7 @@
         <img src="{{ url_for('static', filename='nail7.jpg') }}" alt="Nail 7">
       </div>
     </div>
-    
+
     <!-- Rodapé -->
     <footer class="rodape">
         <p>© 2025 Estúdio Lucimara Ribeiro. Todos os direitos reservados.</p>
@@ -117,6 +114,5 @@
     </footer>
 
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
-    
 </body>
 </html>
