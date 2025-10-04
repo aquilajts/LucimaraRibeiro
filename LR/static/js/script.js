@@ -53,7 +53,6 @@ document.querySelectorAll('form').forEach(form => {
    VALIDAÇÃO FORMULÁRIOS
 ========================= */
 document.addEventListener('DOMContentLoaded', function () {
-
     // LINK "Esqueci minha senha"
     const forgotLink = document.getElementById('forgotPasswordLink');
     if (forgotLink) {
@@ -90,27 +89,28 @@ document.addEventListener('DOMContentLoaded', function () {
             const aniversarioField = document.getElementById('modal_aniversario');
             const novaSenhaField = document.getElementById('nova_senha');
 
-            // Etapa 1: nome + aniversário
-            if (nomeField) {
+            // Etapa 1: Verificação de nome e aniversário (modal)
+            if (nomeField && aniversarioField) {
                 if (nomeField.value.trim() === '') {
                     event.preventDefault();
                     alert('Por favor, preencha o campo Nome.');
+                    resetButton(this);
                     return;
                 }
-            }
-            if (aniversarioField) {
                 if (!aniversarioField.value) {
                     event.preventDefault();
                     alert('Por favor, preencha a data de aniversário.');
+                    resetButton(this);
                     return;
                 }
             }
 
-            // Etapa 2: nova senha
+            // Etapa 2: Redefinição de senha
             if (novaSenhaField) {
                 if (novaSenhaField.value.length < 6) {
                     event.preventDefault();
                     alert('A nova senha deve ter pelo menos 6 dígitos.');
+                    resetButton(this, true);
                     return;
                 }
             }
@@ -123,19 +123,18 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
     }
-
 });
 
 /* =========================
    FUNÇÃO AUXILIAR
 ========================= */
-function resetButton(form, novaSenha = null) {
+function resetButton(form, novaSenha = false) {
     const btn = form.querySelector('.btn');
     if (btn && btn.dataset.originalText) {
         btn.innerHTML = btn.dataset.originalText;
         btn.disabled = false;
     } else if (btn) {
-        // fallback caso não tenha dataset salvo
+        // Fallback caso não tenha dataset salvo
         btn.innerHTML = novaSenha ? 'Redefinir Senha' : 'Verificar';
         btn.disabled = false;
     }
