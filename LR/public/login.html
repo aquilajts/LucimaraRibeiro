@@ -40,16 +40,6 @@
             <button type="submit" class="btn">Salvar e Continuar</button>
         </form>
 
-        {% elif reset_senha and reset_nome %}
-        <form method="POST" action="/esqueci_senha" class="login-form">
-            <input type="hidden" name="nome" value="{{ reset_nome }}" aria-hidden="true">
-            <div class="form-group">
-                <label for="nova_senha">Nova Senha (mínimo 6 dígitos):</label>
-                <input type="password" id="nova_senha" name="nova_senha" required minlength="6" autocomplete="new-password">
-            </div>
-            <button type="submit" class="btn">Redefinir Senha</button>
-        </form>
-
         {% else %}
         <form method="POST" action="/login" class="login-form">
             <div class="form-group">
@@ -74,7 +64,7 @@
         <div class="modal-content">
             <span class="close" onclick="closeForgotPasswordModal()">&times;</span>
             <h2>Recuperar Senha</h2>
-            <form method="POST" action="/esqueci_senha">
+            <form id="forgotPasswordForm" method="POST" action="/esqueci_senha">
                 <div class="form-group">
                     <label for="modal_nome">Nome:</label>
                     <input type="text" id="modal_nome" name="nome" required>
@@ -83,7 +73,11 @@
                     <label for="modal_aniversario">Data de Aniversário:</label>
                     <input type="date" id="modal_aniversario" name="aniversario" required>
                 </div>
-                <button type="submit" class="btn">Verificar</button>
+                <div id="novaSenhaGroup" class="form-group" style="display: none;">
+                    <label for="nova_senha">Nova Senha (mínimo 6 dígitos):</label>
+                    <input type="password" id="nova_senha" name="nova_senha" required minlength="6" autocomplete="new-password">
+                </div>
+                <button type="submit" id="submitBtn" class="btn">Verificar</button>
             </form>
         </div>
     </div>
