@@ -163,7 +163,7 @@ def esqueci_senha():
                 if nova_senha:
                     if len(nova_senha) < 6:
                         logger.error("Nova senha muito curta")
-                        return render_template("login.html", erro="A nova senha deve ter pelo menos 6 dígitos.", reset_senha=True, supabase=supabase)
+                        return render_template("login.html", erro="A nova senha deve ter pelo menos 6 dígitos.", reset_senha=True, reset_nome=nome, supabase=supabase)
                     supabase.table("clientes").update({"senha": nova_senha}).eq("id_cliente", cliente["id_cliente"]).execute()
                     session.pop("reset_nome", None)
                     session.pop("reset_aniversario", None)
@@ -171,7 +171,7 @@ def esqueci_senha():
                     return redirect(url_for("login", msg="Senha redefinida com sucesso."))
                 else:
                     logger.info("Validação bem-sucedida, renderizando form de nova senha")
-                    return render_template("login.html", reset_senha=True, supabase=supabase)
+                    return render_template("login.html", reset_senha=True, reset_nome=nome, supabase=supabase)
             else:
                 logger.error("Dados de aniversário não conferem")
                 return render_template("login.html", erro="Dados não conferem.", supabase=supabase)
