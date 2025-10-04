@@ -134,6 +134,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     if (data.success) {
                         // Sucesso: mostrar campo de nova senha
                         nomeField.readOnly = true;
+                        aniversarioField.readOnly = true; // Tornar aniversário readonly
                         novaSenhaGroup.style.display = 'block';
                         novaSenhaField.setAttribute('required', 'required');
                         submitBtn.textContent = 'Redefinir Senha';
