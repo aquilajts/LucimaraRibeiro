@@ -315,6 +315,19 @@ def api_horarios_disponiveis(id_profissional, data, id_servico):
         prof = prof_response.data[0]
         logger.debug("Profissional encontrado: %s", prof)
 
+        # Tentar parsear horários com diferentes formatos
+        for fmt in ['%H:%M:%S', '%H:%M']:
+            try:
+                inicio = datetime.strptime(prof['horario_inicio'], fmt).time()
+                fim = datetime.strptime(prof['horario_fim'], fmt).time()
+                logger.debug("Horários parseados - Inicio: %s, Fim: %s, Formato: %s", inicio, fim, fmt)
+                break
+            except ValueError:
+                continue
+        else:
+            logger.error("Formato de horário inválido para profissional %s: inicio=%s, fim=%s", id_profissional, prof['horario_inicio'], prof['horario_fim'])
+            return jsonify({"error": "Formato de horário inválido no banco de dados"}), 500
+
         # Consultar serviço
         logger.debug("Consultando serviço %s", id_servico)
         servico_response = supabase.table("servicos").select("duracao_minutos").eq("id_servico", id_servico).execute()
@@ -330,8 +343,6 @@ def api_horarios_disponiveis(id_profissional, data, id_servico):
             return jsonify({"error": "Configuração de dias de trabalho inválida"}), 500
 
         duracao = servico['duracao_minutos']
-        inicio = datetime.strptime(prof['horario_inicio'], '%H:%M').time()
-        fim = datetime.strptime(prof['horario_fim'], '%H:%M').time()
         data_dt = datetime.strptime(data, '%Y-%m-%d').date()
         dia_semana = data_dt.strftime('%A').lower()
         dia_pt = {
@@ -360,15 +371,19 @@ def api_horarios_disponiveis(id_profissional, data, id_servico):
 
         occupied = []
         for ag in agends:
-            hora_start = datetime.strptime(ag['hora_agendamento'], '%H:%M')
-            logger.debug("Consultando duração do serviço %s", ag['id_servico'])
-            serv_dur_response = supabase.table("servicos").select("duracao_minutos").eq("id_servico", ag['id_servico']).execute()
-            if not serv_dur_response.data:
-                logger.error("Serviço %s não encontrado para agendamento", ag['id_servico'])
+            try:
+                hora_start = datetime.strptime(ag['hora_agendamento'], '%H:%M')
+                logger.debug("Consultando duração do serviço %s", ag['id_servico'])
+                serv_dur_response = supabase.table("servicos").select("duracao_minutos").eq("id_servico", ag['id_servico']).execute()
+                if not serv_dur_response.data:
+                    logger.error("Serviço %s não encontrado para agendamento", ag['id_servico'])
+                    continue
+                serv_dur = serv_dur_response.data[0]['duracao_minutos']
+                hora_end = hora_start + timedelta(minutes=serv_dur)
+                occupied.append((hora_start, hora_end))
+            except ValueError as e:
+                logger.error("Erro ao parsear hora_agendamento %s: %s", ag['hora_agendamento'], str(e))
                 continue
-            serv_dur = serv_dur_response.data[0]['duracao_minutos']
-            hora_end = hora_start + timedelta(minutes=serv_dur)
-            occupied.append((hora_start, hora_end))
         logger.debug("Horários ocupados: %s", occupied)
 
         # Filtrar slots livres
