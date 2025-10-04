@@ -1,8 +1,9 @@
 from flask import Flask, render_template, request, redirect, session, url_for, jsonify
 import logging
 from supabase import create_client, Client
-from datetime import datetime
+from datetime import datetime, timedelta, time
 import os
+import zoneinfo
 
 # Configuração de logging
 logging.basicConfig(level=logging.INFO)
@@ -28,6 +29,9 @@ else:
     except Exception as e:
         logger.error(f"Falha ao conectar ao Supabase: {str(e)}")
         supabase = None
+
+# Timezone
+TZ = zoneinfo.ZoneInfo("America/Sao_Paulo")
 
 # Funções Auxiliares
 def usuario_logado():
@@ -216,7 +220,110 @@ def agendamento():
     if not usuario_logado():
         logger.error("Acesso não autorizado a /agendamento")
         return redirect(url_for("login", msg="Faça login para agendar."))
-    return render_template("agendamento.html", user=get_user())
+    # Data mínima: amanhã
+    min_date = (datetime.now(TZ) + timedelta(days=1)).strftime('%Y-%m-%d')
+    return render_template("agendamento.html", user=get_user(), min_date=min_date)
+
+# API: Listar serviços ativos
+@app.route("/api/servicos")
+def api_servicos():
+    if supabase:
+        servicos = supabase.table("servicos").select("id_servico, nome, duracao_minutos").eq("ativo", True).execute().data
+        return jsonify(servicos)
+    return jsonify([])
+
+# API: Profissionais por serviço
+@app.route("/api/profissionais/<int:id_servico>")
+def api_profissionais(id_servico):
+    if supabase:
+        profs = supabase.from_("profissionais_servicos").select("profissionais!inner(id_profissional, nome)").eq("id_servico", id_servico).eq("profissionais.ativo", True).execute().data
+        return jsonify([p['profissionais'] for p in profs])
+    return jsonify([])
+
+# API: Horários disponíveis para profissional, data e serviço
+@app.route("/api/horarios_disponiveis/<int:id_profissional>/<data>/<int:id_servico>")
+def api_horarios_disponiveis(id_profissional, data, id_servico):
+    if not supabase:
+        return jsonify([])
+
+    # Pegar dados do profissional e serviço
+    prof = supabase.table("profissionais").select("horario_inicio, horario_fim, dias_trabalho").eq("id_profissional", id_profissional).single().execute().data
+    servico = supabase.table("servicos").select("duracao_minutos").eq("id_servico", id_servico).single().execute().data
+
+    if not prof or not servico:
+        return jsonify([])
+
+    duracao = servico['duracao_minutos']
+    inicio = datetime.strptime(prof['horario_inicio'], '%H:%M').time()
+    fim = datetime.strptime(prof['horario_fim'], '%H:%M').time()
+    data_dt = datetime.strptime(data, '%Y-%m-%d').date()
+    dia_semana = data_dt.strftime('%A').lower()  # ex: 'monday' -> ajuste para pt: 'segunda', etc.
+    dia_pt = {'monday': 'segunda', 'tuesday': 'terca', 'wednesday': 'quarta', 'thursday': 'quinta', 'friday': 'sexta', 'saturday': 'sabado', 'sunday': 'domingo'}[dia_semana]
+
+    if dia_pt not in prof['dias_trabalho']:
+        return jsonify([])  # Não trabalha nesse dia
+
+    # Gerar slots possíveis (a cada 15min, mas checar duração)
+    slots = []
+    current = datetime.combine(data_dt, inicio)
+    end = datetime.combine(data_dt, fim)
+    while current + timedelta(minutes=duracao) <= end:
+        slots.append(current.strftime('%H:%M'))
+        current += timedelta(minutes=15)  # Intervalo de slots
+
+    # Pegar agendamentos existentes no dia
+    agends = supabase.table("agendamentos").select("hora_agendamento, id_servico").eq("id_profissional", id_profissional).eq("data_agendamento", data).eq("status", "pendente").execute().data  # Assumindo 'pendente' ou 'confirmado'
+
+    occupied = []
+    for ag in agends:
+        hora_start = datetime.strptime(ag['hora_agendamento'], '%H:%M')
+        serv_dur = supabase.table("servicos").select("duracao_minutos").eq("id_servico", ag['id_servico']).single().execute().data['duracao_minutos']
+        hora_end = hora_start + timedelta(minutes=serv_dur)
+        occupied.append((hora_start, hora_end))
+
+    # Filtrar slots livres
+    disponiveis = []
+    for slot in slots:
+        slot_start = datetime.strptime(slot, '%H:%M')
+        slot_end = slot_start + timedelta(minutes=duracao)
+        livre = True
+        for occ_start, occ_end in occupied:
+            if not (slot_end <= occ_start or slot_start >= occ_end):
+                livre = False
+                break
+        if livre:
+            disponiveis.append(slot)
+
+    return jsonify(disponiveis)
+
+# API: Salvar agendamento
+@app.route("/api/agendar", methods=["POST"])
+def api_agendar():
+    if not usuario_logado():
+        return jsonify({"success": False, "error": "Não autenticado"}), 401
+
+    data = request.json
+    required = ['id_servico', 'id_profissional', 'data_agendamento', 'hora_agendamento']
+    if not all(k in data for k in required):
+        return jsonify({"success": False, "error": "Campos obrigatórios faltando"}), 400
+
+    new_agend = {
+        'id_cliente': get_user()['id_cliente'],
+        'id_servico': int(data['id_servico']),
+        'id_profissional': int(data['id_profissional']),
+        'data_agendamento': data['data_agendamento'],
+        'hora_agendamento': data['hora_agendamento'],
+        'status': 'pendente',
+        'observacoes': data.get('observacoes', ''),
+        'created_at': datetime.now(TZ).isoformat()
+    }
+
+    try:
+        supabase.table('agendamentos').insert(new_agend).execute()
+        return jsonify({"success": True})
+    except Exception as e:
+        logger.error(f"Erro ao agendar: {str(e)}")
+        return jsonify({"success": False, "error": "Erro ao salvar agendamento"}), 500
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
