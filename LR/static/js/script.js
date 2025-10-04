@@ -10,12 +10,14 @@ function openForgotPasswordModal() {
         modal.style.display = 'flex';
         const nomeField = document.getElementById('modal_nome');
         const aniversarioField = document.getElementById('modal_aniversario');
+        const novaSenhaField = document.getElementById('nova_senha');
         const novaSenhaGroup = document.getElementById('novaSenhaGroup');
         const submitBtn = document.getElementById('submitBtn');
         if (nomeField && aniversarioField) {
             nomeField.value = '';
             aniversarioField.value = '';
         }
+        if (novaSenhaField) novaSenhaField.removeAttribute('required');
         if (novaSenhaGroup) novaSenhaGroup.style.display = 'none';
         if (submitBtn) submitBtn.textContent = 'Verificar';
     }
@@ -106,7 +108,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const novaSenhaGroup = document.getElementById('novaSenhaGroup');
             const submitBtn = document.getElementById('submitBtn');
 
-            if (nomeField && aniversarioField && !novaSenhaField) {
+            if (nomeField && aniversarioField && !novaSenhaField.value) {
                 // Etapa 1: Verificação de nome e aniversário
                 if (nomeField.value.trim() === '') {
                     alert('Por favor, preencha o campo Nome.');
@@ -123,7 +125,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                     body: new URLSearchParams({
-                        'nome': nomeField.value.trim().toLowerCase(),
+                        'nome': nameField.value.trim().toLowerCase(),
                         'aniversario': aniversarioField.value
                     })
                 })
@@ -133,6 +135,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         // Sucesso: mostrar campo de nova senha
                         nomeField.readOnly = true;
                         novaSenhaGroup.style.display = 'block';
+                        novaSenhaField.setAttribute('required', 'required');
                         submitBtn.textContent = 'Redefinir Senha';
                         resetButton(forgotPasswordForm);
                     } else {
