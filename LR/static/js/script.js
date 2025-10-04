@@ -6,7 +6,19 @@ console.log("Script loaded");
 // Abrir
 function openForgotPasswordModal() {
     const modal = document.getElementById('forgotPasswordModal');
-    if (modal) modal.style.display = 'flex';
+    if (modal) {
+        modal.style.display = 'flex';
+        const nomeField = document.getElementById('modal_nome');
+        const aniversarioField = document.getElementById('modal_aniversario');
+        const novaSenhaGroup = document.getElementById('novaSenhaGroup');
+        const submitBtn = document.getElementById('submitBtn');
+        if (nomeField && aniversarioField) {
+            nomeField.value = '';
+            aniversarioField.value = '';
+        }
+        if (novaSenhaGroup) novaSenhaGroup.style.display = 'none';
+        if (submitBtn) submitBtn.textContent = 'Verificar';
+    }
 }
 
 // Fechar
@@ -43,7 +55,7 @@ function applyLoadingEffect(form) {
         const btn = this.querySelector('.btn:not(.btn-secondary)');
         if (btn && !event.defaultPrevented) {
             btn.dataset.originalText = btn.innerHTML;
-            btn.innerHTML = this.action.includes('esqueci_senha') && document.getElementById('nova_senha') ? 'Redefinindo...' : '⏳ Carregando...';
+            btn.innerHTML = '⏳ Carregando...';
             btn.disabled = true;
         }
     });
@@ -82,39 +94,66 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    // ESQUECI SENHA (modal ou redefinição)
-    const recuperarSenhaForm = document.querySelector('form[action="/esqueci_senha"]');
-    if (recuperarSenhaForm) {
-        applyLoadingEffect(recuperarSenhaForm);
-        recuperarSenhaForm.addEventListener('submit', function(event) {
+    // ESQUECI SENHA (modal)
+    const forgotPasswordForm = document.getElementById('forgotPasswordForm');
+    if (forgotPasswordForm) {
+        applyLoadingEffect(forgotPasswordForm);
+        forgotPasswordForm.addEventListener('submit', function(event) {
+            event.preventDefault(); // Prevenir submit padrão
             const nomeField = document.getElementById('modal_nome');
             const aniversarioField = document.getElementById('modal_aniversario');
             const novaSenhaField = document.getElementById('nova_senha');
+            const novaSenhaGroup = document.getElementById('novaSenhaGroup');
+            const submitBtn = document.getElementById('submitBtn');
 
-            // Etapa 1: Verificação de nome e aniversário (modal)
-            if (nomeField && aniversarioField) {
+            if (nomeField && aniversarioField && !novaSenhaField) {
+                // Etapa 1: Verificação de nome e aniversário
                 if (nomeField.value.trim() === '') {
-                    event.preventDefault();
                     alert('Por favor, preencha o campo Nome.');
                     resetButton(this);
                     return;
                 }
                 if (!aniversarioField.value) {
-                    event.preventDefault();
                     alert('Por favor, preencha a data de aniversário.');
                     resetButton(this);
                     return;
                 }
-            }
-
-            // Etapa 2: Redefinição de senha
-            if (novaSenhaField) {
+                // Enviar requisição AJAX para validação
+                fetch('/esqueci_senha', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({
+                        'nome': nomeField.value.trim().toLowerCase(),
+                        'aniversario': aniversarioField.value
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Sucesso: mostrar campo de nova senha
+                        nomeField.readOnly = true;
+                        novaSenhaGroup.style.display = 'block';
+                        submitBtn.textContent = 'Redefinir Senha';
+                        resetButton(forgotPasswordForm);
+                    } else {
+                        alert(data.error || 'Erro ao validar os dados.');
+                        resetButton(forgotPasswordForm);
+                    }
+                })
+                .catch(error => {
+                    alert('Erro na conexão com o servidor.');
+                    resetButton(forgotPasswordForm);
+                });
+            } else if (novaSenhaField) {
+                // Etapa 2: Redefinição de senha
                 if (novaSenhaField.value.length < 6) {
                     event.preventDefault();
                     alert('A nova senha deve ter pelo menos 6 dígitos.');
                     resetButton(this, true);
                     return;
                 }
+                // Enviar formulário completo
+                this.submit();
             }
         });
     }
