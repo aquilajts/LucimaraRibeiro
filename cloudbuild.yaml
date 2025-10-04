@@ -3,7 +3,6 @@ options:
   logging: CLOUD_LOGGING_ONLY
   machineType: E2_HIGHCPU_8
   diskSizeGb: 50
-  cache: true
 
 steps:
   # 1️⃣ Build da imagem Docker com cache
