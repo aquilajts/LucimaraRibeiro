@@ -1,0 +1,23 @@
+# Arquivos de controle
+.git
+.gitignore
+.DS_Store
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Logs e caches
+*.log
+*.sqlite3
+*.db
+.env
+*.bak
+*.tmp
+
+# Pastas locais
+node_modules
+venv
+.env/
+.idea
+.vscode
