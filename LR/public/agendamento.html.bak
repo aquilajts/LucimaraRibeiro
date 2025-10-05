@@ -43,11 +43,11 @@
             </div>
 
             <div class="form-group" id="servico-group" style="display: none;">
-                <label for="servicos">Selecione os Serviços (pressione Ctrl para múltiplos):</label>
-                <select id="servicos" name="id_servicos[]" multiple required>
-                    <!-- Carregado via JS -->
-                </select>
-                <p id="total-info" style="margin-top: 10px; font-weight: bold;">Total: Duração 0 min, Preço R$ 0,00</p>
+                <label>Selecione os Serviços:</label>
+                <div id="servicos-checkboxes">
+                    <!-- Checkboxes carregados via JS -->
+                </div>
+                <p id="total-info" style="margin-top: 10px; font-weight: bold;">Total: Preço R$ 0,00</p>
             </div>
 
             <div class="form-group" id="profissional-group" style="display: none;">
@@ -61,6 +61,7 @@
             <div class="form-group" id="calendario-group" style="display: none;">
                 <label>Selecione a Data e Horário:</label>
                 <div id="calendar"></div>
+                <p id="horarios-msg" style="text-align: center; color: #ad1457; display: none;">Nenhum horário disponível para esta data.</p>
                 <input type="hidden" id="data_agendamento" name="data_agendamento">
                 <input type="hidden" id="hora_agendamento" name="hora_agendamento">
             </div>
