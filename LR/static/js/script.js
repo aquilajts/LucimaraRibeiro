@@ -202,21 +202,45 @@ document.addEventListener('DOMContentLoaded', function () {
         console.warn("Form de esqueci senha não encontrado");
     }
 
-    // AGENDAMENTO
+   // AGENDAMENTO
     const agendamentoForm = document.getElementById('agendamento-form');
     if (agendamentoForm) {
         console.log("Configurando form de agendamento");
         applyLoadingEffect(agendamentoForm);
         const categoriaSelect = document.getElementById('categoria');
         const servicoGroup = document.getElementById('servico-group');
-        const servicoSelect = document.getElementById('servico');
+        const servicosSelect = document.getElementById('servicos');
+        const totalInfo = document.getElementById('total-info');
         const profissionalGroup = document.getElementById('profissional-group');
         const profissionalSelect = document.getElementById('profissional');
-        const dataGroup = document.getElementById('data-group');
-        const dataInput = document.getElementById('data');
-        const horaGroup = document.getElementById('hora-group');
-        const horaSelect = document.getElementById('hora');
+        const calendarioGroup = document.getElementById('calendario-group');
+        const calendarEl = document.getElementById('calendar');
+        const dataInput = document.getElementById('data_agendamento');
+        const horaInput = document.getElementById('hora_agendamento');
         const submitBtn = agendamentoForm.querySelector('.btn');
+
+        let servicosData = []; // Para armazenar dados de serviços (incluindo preço e duração)
+        let calendar;
+
+        // Inicializar FullCalendar
+        calendar = new FullCalendar.Calendar(calendarEl, {
+            initialView: 'dayGridMonth',
+            selectable: true,
+            select: function(info) {
+                const dataSelecionada = info.startStr; // YYYY-MM-DD
+                dataInput.value = dataSelecionada;
+                carregarHorarios(dataSelecionada);
+            },
+            eventClick: function(info) {
+                horaInput.value = info.event.startStr.split('T')[1].slice(0,5); // HH:MM
+                submitBtn.disabled = false;
+            },
+            events: [], // Carregado dinamicamente
+            validRange: {
+                start: '{{ min_date }}' // Data mínima amanhã
+            }
+        });
+        calendar.render();
 
         // Carregar categorias
         console.log("Carregando categorias via /api/categorias");
@@ -249,10 +273,10 @@ document.addEventListener('DOMContentLoaded', function () {
         categoriaSelect.addEventListener('change', () => {
             const categoria = categoriaSelect.value;
             console.log(`Categoria selecionada: ${categoria}`);
-            servicoSelect.innerHTML = '<option value="">-- Escolha um Serviço --</option>';
+            servicosSelect.innerHTML = '';
             profissionalGroup.style.display = 'none';
-            dataGroup.style.display = 'none';
-            horaGroup.style.display = 'none';
+            calendarioGroup.style.display = 'none';
+            totalInfo.textContent = 'Total: Duração 0 min, Preço R$ 0,00';
             submitBtn.disabled = true;
 
             if (categoria) {
@@ -264,6 +288,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     })
                     .then(data => {
                         console.log("Serviços recebidos:", data);
+                        servicosData = data;
                         if (data.length === 0) {
                             console.warn("Nenhum serviço retornado para categoria:", categoria);
                             alert("Nenhum serviço disponível para esta categoria.");
@@ -272,8 +297,8 @@ document.addEventListener('DOMContentLoaded', function () {
                         data.forEach(servico => {
                             const option = document.createElement('option');
                             option.value = servico.id_servico;
-                            option.textContent = `${servico.nome} (${servico.duracao_minutos} min)`;
-                            servicoSelect.appendChild(option);
+                            option.textContent = `${servico.nome} (${servico.duracao_minutos} min, R$ ${servico.preco})`;
+                            servicosSelect.appendChild(option);
                         });
                         servicoGroup.style.display = 'block';
                     })
@@ -286,17 +311,32 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
 
-        // Carregar profissionais por serviço
-        servicoSelect.addEventListener('change', () => {
-            const idServico = servicoSelect.value;
-            console.log(`Serviço selecionado: ${idServico}`);
+        // Atualizar totais ao selecionar serviços
+        servicosSelect.addEventListener('change', () => {
+            const selectedIds = Array.from(servicosSelect.selectedOptions).map(opt => parseInt(opt.value));
+            if (selectedIds.length > 0) {
+                fetch('/api/calcular_total', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id_servicos: selectedIds })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    totalInfo.textContent = `Total: Duração ${data.duracao_total} min (incl. buffer), Preço R$ ${data.preco_total}`;
+                    // Carregar profissionais para o primeiro serviço (ou ajustar para múltiplos)
+                    carregarProfissionais(selectedIds[0]); // Assumindo profissionais do primeiro serviço
+                })
+                .catch(err => console.error('Erro ao calcular total:', err));
+            }
+        });
+
+        function carregarProfissionais(idServico) {
+            console.log(`Carregando profissionais para serviço: ${idServico}`);
             profissionalSelect.innerHTML = '<option value="">-- Escolha um Profissional --</option>';
-            dataGroup.style.display = 'none';
-            horaGroup.style.display = 'none';
+            calendarioGroup.style.display = 'none';
             submitBtn.disabled = true;
 
             if (idServico) {
-                console.log(`Carregando profissionais para serviço: ${idServico}`);
                 fetch(`/api/profissionais/${idServico}`)
                     .then(res => {
                         console.log(`Resposta de /api/profissionais: ${res.status}`);
@@ -324,114 +364,84 @@ document.addEventListener('DOMContentLoaded', function () {
             } else {
                 profissionalGroup.style.display = 'none';
             }
-        });
+        }
 
-        // Mostrar campo de data
+        // Mostrar calendário
         profissionalSelect.addEventListener('change', () => {
             console.log(`Profissional selecionado: ${profissionalSelect.value}`);
             if (profissionalSelect.value) {
-                dataGroup.style.display = 'block';
+                calendarioGroup.style.display = 'block';
             } else {
-                dataGroup.style.display = 'none';
-                horaGroup.style.display = 'none';
+                calendarioGroup.style.display = 'none';
                 submitBtn.disabled = true;
             }
         });
 
-        // Carregar horários disponíveis
-        dataInput.addEventListener('change', () => {
+        // Carregar horários para o dia selecionado
+        function carregarHorarios(data) {
             const idProfissional = profissionalSelect.value;
-            const data = dataInput.value;
-            const idServico = servicoSelect.value;
-            console.log(`Data selecionada: ${data}, Profissional: ${idProfissional}, Serviço: ${idServico}`);
-            horaSelect.innerHTML = '<option value="">-- Escolha um Horário --</option>';
-            submitBtn.disabled = true;
-
-            if (idProfissional && data && idServico) {
-                console.log(`Carregando horários disponíveis para ${idProfissional}/${data}/${idServico}`);
-                fetch(`/api/horarios_disponiveis/${idProfissional}/${data}/${idServico}`)
-                    .then(res => {
-                        console.log(`Resposta de /api/horarios_disponiveis: ${res.status}`);
-                        return res.json();
-                    })
-                    .then(data => {
-                        console.log("Horários recebidos:", data);
-                        if (data.error) {
-                            console.warn("Erro retornado pela API:", data.error);
-                            alert(data.error || "Erro ao carregar horários. Tente novamente.");
-                            return;
-                        }
-                        if (data.length === 0) {
-                            console.warn("Nenhum horário disponível para:", { idProfissional, data, idServico });
-                            alert("Nenhum horário disponível para esta data.");
-                            return;
-                        }
-                        data.forEach(hora => {
-                            const option = document.createElement('option');
-                            option.value = hora;
-                            option.textContent = hora;
-                            horaSelect.appendChild(option);
-                        });
-                        horaGroup.style.display = 'block';
-                    })
-                    .catch(err => {
-                        console.error("Erro ao carregar horários:", err);
-                        alert("Erro ao carregar horários. Tente novamente.");
+            const selectedIds = Array.from(servicosSelect.selectedOptions).map(opt => parseInt(opt.value));
+            console.log(`Carregando horários para data: ${data}, Profissional: ${idProfissional}, Serviços: ${selectedIds}`);
+            fetch(`/api/horarios_disponiveis/${idProfissional}/${data}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id_servicos: selectedIds })
+            })
+            .then(res => {
+                console.log(`Resposta de /api/horarios_disponiveis: ${res.status}`);
+                return res.json();
+            })
+            .then(data => {
+                console.log("Horários recebidos:", data);
+                if (data.error) {
+                    console.warn("Erro retornado pela API:", data.error);
+                    alert(data.error || "Erro ao carregar horários. Tente novamente.");
+                    return;
+                }
+                if (data.length === 0) {
+                    console.warn("Nenhum horário disponível para:", { idProfissional, data, selectedIds });
+                    alert("Nenhum horário disponível para esta data.");
+                    return;
+                }
+                // Limpar eventos anteriores e adicionar novos
+                calendar.removeAllEvents();
+                data.forEach(hora => {
+                    calendar.addEvent({
+                        title: hora,
+                        start: `${data}T${hora}:00`
                     });
-            } else {
-                horaGroup.style.display = 'none';
-            }
-        });
-
-        // Habilitar botão ao selecionar hora
-        horaSelect.addEventListener('change', () => {
-            console.log(`Horário selecionado: ${horaSelect.value}`);
-            submitBtn.disabled = !horaSelect.value;
-        });
+                });
+            })
+            .catch(err => {
+                console.error("Erro ao carregar horários:", err);
+                alert("Erro ao carregar horários. Tente novamente.");
+            });
+        }
 
         // Validação e submissão do formulário
         agendamentoForm.addEventListener('submit', function(event) {
             event.preventDefault();
-            const categoria = categoriaSelect.value;
-            const idServico = servicoSelect.value;
-            const idProfissional = profissionalSelect.value;
-            const data = dataInput.value;
-            const hora = horaSelect.value;
-
-            console.log("Submetendo agendamento:", { categoria, idServico, idProfissional, data, hora });
-            if (!categoria || !idServico || !idProfissional || !data || !hora) {
-                console.error("Campos obrigatórios faltando");
-                alert('Por favor, preencha todos os campos obrigatórios.');
-                resetButton(this);
-                return;
-            }
-
+            const selectedIds = Array.from(servicosSelect.selectedOptions).map(opt => parseInt(opt.value));
             const formData = new FormData(this);
+            formData.set('id_servicos', selectedIds);
             fetch('/api/agendar', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(Object.fromEntries(formData))
             })
-                .then(res => {
-                    console.log(`Resposta de /api/agendar: ${res.status}`);
-                    return res.json();
-                })
-                .then(data => {
-                    console.log("Resposta de agendamento:", data);
-                    if (data.success) {
-                        console.log("Agendamento bem-sucedido, redirecionando");
-                        window.location.href = '/agendamento?msg=Agendamento realizado com sucesso!';
-                    } else {
-                        console.error("Erro no agendamento:", data.error);
-                        alert(data.error || 'Erro ao agendar.');
-                        resetButton(this);
-                    }
-                })
-                .catch(err => {
-                    console.error("Erro na requisição /api/agendar:", err);
-                    alert('Erro na conexão com o servidor.');
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.href = '/agendamento?msg=Agendamento realizado com sucesso!';
+                } else {
+                    alert(data.error || 'Erro ao agendar.');
                     resetButton(this);
-                });
+                }
+            })
+            .catch(err => {
+                alert('Erro na conexão com o servidor.');
+                resetButton(this);
+            });
         });
     } else {
         console.warn("Form de agendamento não encontrado");
