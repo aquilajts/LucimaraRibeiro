@@ -202,7 +202,7 @@ document.addEventListener('DOMContentLoaded', function () {
         console.warn("Form de esqueci senha não encontrado");
     }
 
-/ AGENDAMENTO
+    // AGENDAMENTO
     const agendamentoForm = document.getElementById('agendamento-form');
     if (agendamentoForm) {
         console.log("Configurando form de agendamento");
