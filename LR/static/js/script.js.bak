@@ -356,6 +356,11 @@ document.addEventListener('DOMContentLoaded', function () {
                     })
                     .then(data => {
                         console.log("Horários recebidos:", data);
+                        if (data.error) {
+                            console.warn("Erro retornado pela API:", data.error);
+                            alert(data.error || "Erro ao carregar horários. Tente novamente.");
+                            return;
+                        }
                         if (data.length === 0) {
                             console.warn("Nenhum horário disponível para:", { idProfissional, data, idServico });
                             alert("Nenhum horário disponível para esta data.");
