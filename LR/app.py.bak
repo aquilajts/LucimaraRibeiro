@@ -244,27 +244,23 @@ def agendamento():
     logger.debug("Renderizando agendamento.html com min_date: %s", min_date)
     return render_template("agendamento.html", user=get_user(), min_date=min_date)
 
-# API: Calcular total de serviços
+# API: Calcular total de serviços (apenas preço no frontend, duração armazenada no backend)
 @app.route("/api/calcular_total", methods=["POST"])
 def api_calcular_total():
     logger.info("Acessando API /api/calcular_total")
     data = request.json
     id_servicos = data.get('id_servicos', [])
     if not supabase or not id_servicos:
-        logger.warning("Supabase não inicializado ou id_servicos vazio")
-        return jsonify({"duracao_total": 0, "preco_total": 0.0})
+        return jsonify({"preco_total": 0.0})
 
     try:
-        servicos = supabase.table("servicos").select("duracao_minutos, preco").in_("id_servico", id_servicos).execute().data
-        duracao_total = sum(s['duracao_minutos'] for s in servicos)
+        servicos = supabase.table("servicos").select("preco").in_("id_servico", id_servicos).execute().data
         preco_total = sum(float(s['preco']) for s in servicos)
-        buffer_extra = math.floor(duracao_total / 20) * 5
-        duracao_total += buffer_extra
-        logger.debug("Totais calculados: duracao=%s min, preco=R$ %s", duracao_total, preco_total)
-        return jsonify({"duracao_total": duracao_total, "preco_total": round(preco_total, 2)})
+        logger.debug("Preço total calculado: R$ %s", preco_total)
+        return jsonify({"preco_total": round(preco_total, 2)})
     except Exception as e:
         logger.error("Erro ao calcular total: %s", str(e))
-        return jsonify({"duracao_total": 0, "preco_total": 0.0}), 500
+        return jsonify({"preco_total": 0.0}), 500
 
 # API: Listar categorias distintas
 @app.route("/api/categorias")
@@ -328,7 +324,7 @@ def api_horarios_disponiveis(id_profissional, data):
         return jsonify({"error": "Servidor de banco de dados não disponível"}), 500
 
     try:
-        # Calcular duração total com buffer
+        # Calcular duração total com buffer (armazenada, mas não retornada)
         if not id_servicos:
             logger.error("Lista de id_servicos vazia")
             return jsonify({"error": "Nenhum serviço selecionado"}), 400
