@@ -11,7 +11,7 @@ logging.basicConfig(
     format='%(asctime)s [%(levelname)s] %(message)s',
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler('app.log')  # Salva logs em um arquivo para depuração
+        logging.FileHandler('app.log')
     ]
 )
 logger = logging.getLogger(__name__)
@@ -120,11 +120,11 @@ def login():
                     logger.error("Erro no login demo")
 
     logger.debug("Renderizando login.html com erro: %s, solicitar_aniversario: %s", erro, solicitar_aniversario)
-    return render_template("login.html", erro=erro,
-                           solicitar_aniversario=solicitar_aniversario,
-                           reset_senha=reset_senha,
-                           nome=nome, aniversario=aniversario,
-                           supabase=supabase)
+    return jsonify(erro=erro,
+                   solicitar_aniversario=solicitar_aniversario,
+                   reset_senha=reset_senha,
+                   nome=nome, aniversario=aniversario,
+                   supabase=supabase)
 
 @app.route("/atualizar_aniversario", methods=["POST"])
 def atualizar_aniversario():
@@ -152,7 +152,7 @@ def atualizar_aniversario():
             logger.info("Usuário atualizado e temp_user removido")
         except Exception as e:
             logger.error("Erro ao atualizar aniversário: %s", str(e))
-            return render_template("login.html", erro="Erro ao salvar dados.", supabase=supabase)
+            return jsonify(erro="Erro ao salvar dados.", supabase=supabase)
     return redirect(url_for("agendamento"))
 
 @app.route("/esqueci_senha", methods=["POST"])
@@ -198,7 +198,7 @@ def esqueci_senha():
         logger.info("Redefinindo senha para Nome: %s, Aniversário: %s", nome, aniversario)
         if not nome or not aniversario:
             logger.error("Campos nome/aniv ausentes")
-            return render_template("login.html", erro="Erro na recuperação de senha.", supabase=supabase)
+            return jsonify(erro="Erro na recuperação de senha.", supabase=supabase)
 
         if not supabase:
             logger.error("Supabase não inicializado")
@@ -235,7 +235,7 @@ def logout():
     logger.info("Usuário deslogado")
     return redirect(url_for("index"))
 
-# Rotas atualizadas para agendamento
+# Rotas para agendamento
 @app.route("/agendamento")
 def agendamento():
     logger.info("Acessando rota /agendamento")
@@ -302,29 +302,57 @@ def api_profissionais(id_servico):
 def api_horarios_disponiveis(id_profissional, data, id_servico):
     logger.info("Acessando API /api/horarios_disponiveis/%s/%s/%s", id_profissional, data, id_servico)
     if not supabase:
-        logger.warning("Supabase não inicializado")
-        return jsonify([])
+        logger.error("Supabase não inicializado")
+        return jsonify({"error": "Servidor de banco de dados não disponível"}), 500
 
     try:
+        # Consultar profissional
         logger.debug("Consultando profissional %s", id_profissional)
-        prof = supabase.table("profissionais").select("horario_inicio, horario_fim, dias_trabalho").eq("id_profissional", id_profissional).single().execute().data
-        logger.debug("Consultando serviço %s", id_servico)
-        servico = supabase.table("servicos").select("duracao_minutos").eq("id_servico", id_servico).single().execute().data
+        prof_response = supabase.table("profissionais").select("horario_inicio, horario_fim, dias_trabalho").eq("id_profissional", id_profissional).execute()
+        if not prof_response.data:
+            logger.error("Profissional %s não encontrado", id_profissional)
+            return jsonify({"error": "Profissional não encontrado"}), 404
+        prof = prof_response.data[0]
+        logger.debug("Profissional encontrado: %s", prof)
 
-        if not prof or not servico:
-            logger.error("Profissional ou serviço não encontrado")
-            return jsonify([])
+        # Tentar parsear horários com diferentes formatos
+        for fmt in ['%H:%M:%S', '%H:%M']:
+            try:
+                inicio = datetime.strptime(prof['horario_inicio'], fmt).time()
+                fim = datetime.strptime(prof['horario_fim'], fmt).time()
+                logger.debug("Horários parseados - Inicio: %s, Fim: %s, Formato: %s", inicio, fim, fmt)
+                break
+            except ValueError:
+                continue
+        else:
+            logger.error("Formato de horário inválido para profissional %s: inicio=%s, fim=%s", id_profissional, prof['horario_inicio'], prof['horario_fim'])
+            return jsonify({"error": "Formato de horário inválido no banco de dados"}), 500
+
+        # Consultar serviço
+        logger.debug("Consultando serviço %s", id_servico)
+        servico_response = supabase.table("servicos").select("duracao_minutos").eq("id_servico", id_servico).execute()
+        if not servico_response.data:
+            logger.error("Serviço %s não encontrado", id_servico)
+            return jsonify({"error": "Serviço não encontrado"}), 404
+        servico = servico_response.data[0]
+        logger.debug("Serviço encontrado: %s", servico)
+
+        # Validar dias_trabalho
+        if not isinstance(prof.get('dias_trabalho'), list):
+            logger.error("dias_trabalho inválido para profissional %s: %s", id_profissional, prof.get('dias_trabalho'))
+            return jsonify({"error": "Configuração de dias de trabalho inválida"}), 500
 
         duracao = servico['duracao_minutos']
-        inicio = datetime.strptime(prof['horario_inicio'], '%H:%M').time()
-        fim = datetime.strptime(prof['horario_fim'], '%H:%M').time()
         data_dt = datetime.strptime(data, '%Y-%m-%d').date()
         dia_semana = data_dt.strftime('%A').lower()
-        dia_pt = {'monday': 'segunda', 'tuesday': 'terca', 'wednesday': 'quarta', 'thursday': 'quinta', 'friday': 'sexta', 'saturday': 'sabado', 'sunday': 'domingo'}[dia_semana]
+        dia_pt = {
+            'monday': 'segunda', 'tuesday': 'terca', 'wednesday': 'quarta',
+            'thursday': 'quinta', 'friday': 'sexta', 'saturday': 'sabado', 'sunday': 'domingo'
+        }[dia_semana]
         logger.debug("Dia da semana: %s, Dias de trabalho do profissional: %s", dia_pt, prof['dias_trabalho'])
 
-        if dia_pt not in prof['dias_trabalho']:
-            logger.info("Profissional não trabalha no dia: %s", dia_pt)
+        if dia_pt not in [d.lower() for d in prof['dias_trabalho']]:
+            logger.info("Profissional %s não trabalha no dia: %s", id_profissional, dia_pt)
             return jsonify([])
 
         # Gerar slots possíveis (intervalos de 15min)
@@ -336,18 +364,26 @@ def api_horarios_disponiveis(id_profissional, data, id_servico):
             current += timedelta(minutes=15)
         logger.debug("Slots possíveis gerados: %s", slots)
 
-        # Pegar agendamentos existentes
+        # Consultar agendamentos existentes
         logger.debug("Consultando agendamentos para profissional %s na data %s", id_profissional, data)
         agends = supabase.table("agendamentos").select("hora_agendamento, id_servico").eq("id_profissional", id_profissional).eq("data_agendamento", data).eq("status", "pendente").execute().data
         logger.debug("Agendamentos encontrados: %s", agends)
 
         occupied = []
         for ag in agends:
-            hora_start = datetime.strptime(ag['hora_agendamento'], '%H:%M')
-            logger.debug("Consultando duração do serviço %s", ag['id_servico'])
-            serv_dur = supabase.table("servicos").select("duracao_minutos").eq("id_servico", ag['id_servico']).single().execute().data['duracao_minutos']
-            hora_end = hora_start + timedelta(minutes=serv_dur)
-            occupied.append((hora_start, hora_end))
+            try:
+                hora_start = datetime.strptime(ag['hora_agendamento'], '%H:%M')
+                logger.debug("Consultando duração do serviço %s", ag['id_servico'])
+                serv_dur_response = supabase.table("servicos").select("duracao_minutos").eq("id_servico", ag['id_servico']).execute()
+                if not serv_dur_response.data:
+                    logger.error("Serviço %s não encontrado para agendamento", ag['id_servico'])
+                    continue
+                serv_dur = serv_dur_response.data[0]['duracao_minutos']
+                hora_end = hora_start + timedelta(minutes=serv_dur)
+                occupied.append((hora_start, hora_end))
+            except ValueError as e:
+                logger.error("Erro ao parsear hora_agendamento %s: %s", ag['hora_agendamento'], str(e))
+                continue
         logger.debug("Horários ocupados: %s", occupied)
 
         # Filtrar slots livres
@@ -366,8 +402,8 @@ def api_horarios_disponiveis(id_profissional, data, id_servico):
 
         return jsonify(disponiveis)
     except Exception as e:
-        logger.error("Erro ao calcular horários: %s", str(e))
-        return jsonify([]), 500
+        logger.error("Erro ao calcular horários disponíveis - Profissional: %s, Data: %s, Serviço: %s, Erro: %s", id_profissional, data, id_servico, str(e))
+        return jsonify({"error": f"Erro ao calcular horários: {str(e)}"}), 500
 
 # API: Salvar agendamento
 @app.route("/api/agendar", methods=["POST"])
