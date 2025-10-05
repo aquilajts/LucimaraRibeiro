@@ -8,6 +8,9 @@
     <script src="{{ url_for('static', filename='js/script.js') }}" defer></script>
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='logo.png') }}" />
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&display=swap" rel="stylesheet">
+    <!-- FullCalendar CDN -->
+    <link href='https://cdn.jsdelivr.net/npm/fullcalendar@5.11.0/main.min.css' rel='stylesheet' />
+    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@5.11.0/main.min.js'></script>
 </head>
 <body>
     <!-- Hero -->
@@ -40,11 +43,11 @@
             </div>
 
             <div class="form-group" id="servico-group" style="display: none;">
-                <label for="servico">Selecione o Serviço:</label>
-                <select id="servico" name="id_servico" required>
-                    <option value="">-- Escolha um Serviço --</option>
+                <label for="servicos">Selecione os Serviços (pressione Ctrl para múltiplos):</label>
+                <select id="servicos" name="id_servicos[]" multiple required>
                     <!-- Carregado via JS -->
                 </select>
+                <p id="total-info" style="margin-top: 10px; font-weight: bold;">Total: Duração 0 min, Preço R$ 0,00</p>
             </div>
 
             <div class="form-group" id="profissional-group" style="display: none;">
@@ -55,17 +58,11 @@
                 </select>
             </div>
 
-            <div class="form-group" id="data-group" style="display: none;">
-                <label for="data">Selecione a Data:</label>
-                <input type="date" id="data" name="data_agendamento" required min="{{ min_date }}">
-            </div>
-
-            <div class="form-group" id="hora-group" style="display: none;">
-                <label for="hora">Horários Disponíveis:</label>
-                <select id="hora" name="hora_agendamento" required>
-                    <option value="">-- Escolha um Horário --</option>
-                    <!-- Carregado via JS -->
-                </select>
+            <div class="form-group" id="calendario-group" style="display: none;">
+                <label>Selecione a Data e Horário:</label>
+                <div id="calendar"></div>
+                <input type="hidden" id="data_agendamento" name="data_agendamento">
+                <input type="hidden" id="hora_agendamento" name="hora_agendamento">
             </div>
 
             <div class="form-group">
