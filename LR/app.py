@@ -1,7 +1,7 @@
 from flask import Flask, render_template, request, redirect, session, url_for, jsonify
 import logging
 from supabase import create_client, Client
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 import os
 import zoneinfo
 import math
@@ -51,7 +51,7 @@ def get_user():
     logger.debug("Obtendo usuário da sessão: %s", user)
     return user
 
-# Rotas existentes (mantidas intactas)
+# Rotas existentes
 @app.route("/")
 def index():
     logger.info("Acessando rota /index")
@@ -84,7 +84,7 @@ def login():
                 if cliente.data:
                     cliente = cliente.data[0]
                     if cliente.get("senha") == senha:
-                        if not cliente.get("aniversario"):
+                        if not cliente.get("aniversario") or cliente.get("aniversario") == '0001-01-01':
                             session["temp_user"] = cliente
                             solicitar_aniversario = True
                             logger.info("Usuário %s sem aniversário, solicitando", nome)
@@ -121,11 +121,8 @@ def login():
                     logger.error("Erro no login demo")
 
     logger.debug("Renderizando login.html com erro: %s, solicitar_aniversario: %s", erro, solicitar_aniversario)
-    return jsonify(erro=erro,
-                   solicitar_aniversario=solicitar_aniversario,
-                   reset_senha=reset_senha,
-                   nome=nome, aniversario=aniversario,
-                   supabase=supabase)
+    return render_template("login.html", erro=erro, solicitar_aniversario=solicitar_aniversario,
+                          reset_senha=reset_senha, nome=nome, aniversario=aniversario, supabase=supabase)
 
 @app.route("/atualizar_aniversario", methods=["POST"])
 def atualizar_aniversario():
@@ -151,9 +148,10 @@ def atualizar_aniversario():
             session["user"] = user
             session.pop("temp_user", None)
             logger.info("Usuário atualizado e temp_user removido")
+            return redirect(url_for("agendamento"))
         except Exception as e:
             logger.error("Erro ao atualizar aniversário: %s", str(e))
-            return jsonify(erro="Erro ao salvar dados.", supabase=supabase)
+            return jsonify(erro="Erro ao salvar dados."), 500
     return redirect(url_for("agendamento"))
 
 @app.route("/esqueci_senha", methods=["POST"])
@@ -199,7 +197,7 @@ def esqueci_senha():
         logger.info("Redefinindo senha para Nome: %s, Aniversário: %s", nome, aniversario)
         if not nome or not aniversario:
             logger.error("Campos nome/aniv ausentes")
-            return jsonify(erro="Erro na recuperação de senha.", supabase=supabase)
+            return jsonify({"success": False, "error": "Erro na recuperação de senha."})
 
         if not supabase:
             logger.error("Supabase não inicializado")
@@ -253,16 +251,17 @@ def api_calcular_total():
     data = request.json
     id_servicos = data.get('id_servicos', [])
     if not supabase or not id_servicos:
+        logger.warning("Supabase não inicializado ou id_servicos vazio")
         return jsonify({"duracao_total": 0, "preco_total": 0.0})
 
     try:
         servicos = supabase.table("servicos").select("duracao_minutos, preco").in_("id_servico", id_servicos).execute().data
         duracao_total = sum(s['duracao_minutos'] for s in servicos)
-        preco_total = sum(s['preco'] for s in servicos)
+        preco_total = sum(float(s['preco']) for s in servicos)
         buffer_extra = math.floor(duracao_total / 20) * 5
         duracao_total += buffer_extra
-        logger.debug("Totais calculados: duracao=%s, preco=%s", duracao_total, preco_total)
-        return jsonify({"duracao_total": duracao_total, "preco_total": preco_total})
+        logger.debug("Totais calculados: duracao=%s min, preco=R$ %s", duracao_total, preco_total)
+        return jsonify({"duracao_total": duracao_total, "preco_total": round(preco_total, 2)})
     except Exception as e:
         logger.error("Erro ao calcular total: %s", str(e))
         return jsonify({"duracao_total": 0, "preco_total": 0.0}), 500
@@ -292,7 +291,7 @@ def api_servicos():
     if supabase and categoria:
         try:
             logger.debug("Consultando serviços no Supabase - Categoria: %s", categoria)
-            servicos = supabase.table("servicos").select("id_servico, nome, duracao_minutos").eq("ativo", True).eq("categoria", categoria).execute().data
+            servicos = supabase.table("servicos").select("id_servico, nome, duracao_minutos, preco").eq("ativo", True).eq("categoria", categoria).execute().data
             logger.debug("Serviços encontrados: %s", servicos)
             return jsonify(servicos)
         except Exception as e:
@@ -318,7 +317,7 @@ def api_profissionais(id_servico):
     logger.warning("Supabase não inicializado")
     return jsonify([])
 
-# API: Horários disponíveis (agora recebe lista de serviços)
+# API: Horários disponíveis
 @app.route("/api/horarios_disponiveis/<int:id_profissional>/<data>", methods=["POST"])
 def api_horarios_disponiveis(id_profissional, data):
     logger.info("Acessando API /api/horarios_disponiveis/%s/%s", id_profissional, data)
@@ -330,13 +329,15 @@ def api_horarios_disponiveis(id_profissional, data):
 
     try:
         # Calcular duração total com buffer
+        if not id_servicos:
+            logger.error("Lista de id_servicos vazia")
+            return jsonify({"error": "Nenhum serviço selecionado"}), 400
         servicos = supabase.table("servicos").select("duracao_minutos").in_("id_servico", id_servicos).execute().data
         duracao_total = sum(s['duracao_minutos'] for s in servicos)
         buffer_extra = math.floor(duracao_total / 20) * 5
         duracao_total += buffer_extra
         logger.debug("Duração total ajustada: %s min", duracao_total)
 
-    try:
         # Consultar profissional
         logger.debug("Consultando profissional %s", id_profissional)
         prof_response = supabase.table("profissionais").select("horario_inicio, horario_fim, dias_trabalho").eq("id_profissional", id_profissional).execute()
@@ -359,21 +360,11 @@ def api_horarios_disponiveis(id_profissional, data):
             logger.error("Formato de horário inválido para profissional %s: inicio=%s, fim=%s", id_profissional, prof['horario_inicio'], prof['horario_fim'])
             return jsonify({"error": "Formato de horário inválido no banco de dados"}), 500
 
-        # Consultar serviço
-        logger.debug("Consultando serviço %s", id_servico)
-        servico_response = supabase.table("servicos").select("duracao_minutos").eq("id_servico", id_servico).execute()
-        if not servico_response.data:
-            logger.error("Serviço %s não encontrado", id_servico)
-            return jsonify({"error": "Serviço não encontrado"}), 404
-        servico = servico_response.data[0]
-        logger.debug("Serviço encontrado: %s", servico)
-
         # Validar dias_trabalho
         if not isinstance(prof.get('dias_trabalho'), list):
             logger.error("dias_trabalho inválido para profissional %s: %s", id_profissional, prof.get('dias_trabalho'))
             return jsonify({"error": "Configuração de dias de trabalho inválida"}), 500
 
-        duracao = servico['duracao_minutos']
         data_dt = datetime.strptime(data, '%Y-%m-%d').date()
         dia_semana = data_dt.strftime('%A').lower()
         dia_pt = {
@@ -390,27 +381,22 @@ def api_horarios_disponiveis(id_profissional, data):
         slots = []
         current = datetime.combine(data_dt, inicio)
         end = datetime.combine(data_dt, fim)
-        while current + timedelta(minutes=duracao) <= end:
+        while current + timedelta(minutes=duracao_total) <= end:
             slots.append(current.strftime('%H:%M'))
             current += timedelta(minutes=15)
         logger.debug("Slots possíveis gerados: %s", slots)
 
         # Consultar agendamentos existentes
         logger.debug("Consultando agendamentos para profissional %s na data %s", id_profissional, data)
-        agends = supabase.table("agendamentos").select("hora_agendamento, id_servico").eq("id_profissional", id_profissional).eq("data_agendamento", data).eq("status", "pendente").execute().data
+        agends = supabase.table("agendamentos").select("hora_agendamento, duracao_total").eq("id_profissional", id_profissional).eq("data_agendamento", data).eq("status", "pendente").execute().data
         logger.debug("Agendamentos encontrados: %s", agends)
 
         occupied = []
         for ag in agends:
             try:
                 hora_start = datetime.strptime(ag['hora_agendamento'], '%H:%M')
-                logger.debug("Consultando duração do serviço %s", ag['id_servico'])
-                serv_dur_response = supabase.table("servicos").select("duracao_minutos").eq("id_servico", ag['id_servico']).execute()
-                if not serv_dur_response.data:
-                    logger.error("Serviço %s não encontrado para agendamento", ag['id_servico'])
-                    continue
-                serv_dur = serv_dur_response.data[0]['duracao_minutos']
-                hora_end = hora_start + timedelta(minutes=serv_dur)
+                duracao = ag.get('duracao_total', 0) or 60  # Fallback se duracao_total não estiver definido
+                hora_end = hora_start + timedelta(minutes=duracao)
                 occupied.append((hora_start, hora_end))
             except ValueError as e:
                 logger.error("Erro ao parsear hora_agendamento %s: %s", ag['hora_agendamento'], str(e))
@@ -436,7 +422,7 @@ def api_horarios_disponiveis(id_profissional, data):
         logger.error("Erro ao calcular horários disponíveis - Profissional: %s, Data: %s, Serviços: %s, Erro: %s", id_profissional, data, id_servicos, str(e))
         return jsonify({"error": f"Erro ao calcular horários: {str(e)}"}), 500
 
-# API: Salvar agendamento (agora com serviços múltiplos)
+# API: Salvar agendamento
 @app.route("/api/agendar", methods=["POST"])
 def api_agendar():
     logger.info("Acessando API /api/agendar")
@@ -452,11 +438,15 @@ def api_agendar():
 
     id_servicos = data['id_servicos']
     # Calcular totais
-    servicos = supabase.table("servicos").select("duracao_minutos, preco").in_("id_servico", id_servicos).execute().data
-    duracao_total = sum(s['duracao_minutos'] for s in servicos)
-    buffer_extra = math.floor(duracao_total / 20) * 5
-    duracao_total += buffer_extra
-    preco_total = sum(s['preco'] for s in servicos)
+    try:
+        servicos = supabase.table("servicos").select("duracao_minutos, preco").in_("id_servico", id_servicos).execute().data
+        duracao_total = sum(s['duracao_minutos'] for s in servicos)
+        buffer_extra = math.floor(duracao_total / 20) * 5
+        duracao_total += buffer_extra
+        preco_total = sum(float(s['preco']) for s in servicos)
+    except Exception as e:
+        logger.error("Erro ao calcular totais para agendamento: %s", str(e))
+        return jsonify({"success": False, "error": "Erro ao calcular totais"}), 500
 
     new_agend = {
         'id_cliente': get_user()['id_cliente'],
@@ -465,7 +455,7 @@ def api_agendar():
         'data_agendamento': data['data_agendamento'],
         'hora_agendamento': data['hora_agendamento'],
         'duracao_total': duracao_total,
-        'preco_total': preco_total,
+        'preco_total': round(preco_total, 2),
         'status': 'pendente',
         'observacoes': data.get('observacoes', ''),
         'created_at': datetime.now(TZ).isoformat()
