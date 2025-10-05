@@ -345,3 +345,32 @@ body {
     .form-container h2, .login-container h2 { font-size: 22px; }
     .carousel img { width: 200px; height: 150px; }
 }
+
+/* =========================
+   FULL CALENDAR
+========================= */
+/* Estilos para multi-select */
+select[multiple] {
+    height: 150px; /* Altura para mostrar múltiplas opções */
+}
+
+/* Estilos para FullCalendar */
+#calendar {
+    max-width: 100%;
+    height: 400px;
+    margin: 0 auto;
+}
+
+.fc-daygrid-day-number {
+    color: #fff; /* Cor do texto dos dias */
+}
+
+.fc-event {
+    background-color: #d81b60; /* Rosa escuro para eventos */
+    border: none;
+    color: #fff;
+}
+
+.fc-day-disabled {
+    background-color: #ccc; /* Dias indisponíveis */
+}
