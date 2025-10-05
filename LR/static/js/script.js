@@ -202,28 +202,28 @@ document.addEventListener('DOMContentLoaded', function () {
         console.warn("Form de esqueci senha não encontrado");
     }
 
-   // AGENDAMENTO
+/ AGENDAMENTO
     const agendamentoForm = document.getElementById('agendamento-form');
     if (agendamentoForm) {
         console.log("Configurando form de agendamento");
         applyLoadingEffect(agendamentoForm);
-        const categoriaSelect = document.getElementById('categoria');
-        const servicoGroup = document.getElementById('servico-group');
-        const servicosCheckboxes = document.getElementById('servicos-checkboxes');
+        const categoriasContainer = document.getElementById('categorias-container');
+        const addCategoriaBtn = document.getElementById('add-categoria');
         const totalInfo = document.getElementById('total-info');
         const profissionalGroup = document.getElementById('profissional-group');
         const profissionalSelect = document.getElementById('profissional');
         const calendarioGroup = document.getElementById('calendario-group');
         const calendarEl = document.getElementById('calendar');
         const horariosMsg = document.getElementById('horarios-msg');
+        const horaSelect = document.getElementById('hora');
         const dataInput = document.getElementById('data_agendamento');
-        const horaInput = document.getElementById('hora_agendamento');
         const submitBtn = agendamentoForm.querySelector('.btn');
 
-        let servicosData = []; // Para armazenar dados de serviços
+        let servicosData = {}; // Para armazenar dados de serviços por categoria
         let calendar;
+        let categoriaCount = 1;
 
-        // Inicializar FullCalendar com estilos personalizados
+        // Inicializar FullCalendar com businessHours para dias de trabalho
         calendar = new FullCalendar.Calendar(calendarEl, {
             initialView: 'dayGridMonth',
             selectable: true,
@@ -231,101 +231,90 @@ document.addEventListener('DOMContentLoaded', function () {
                 const dataSelecionada = info.startStr; // YYYY-MM-DD
                 dataInput.value = dataSelecionada;
                 carregarHorarios(dataSelecionada);
+                // Destacar dia selecionado
+                document.querySelectorAll('.fc-day-selected').forEach(el => el.classList.remove('fc-day-selected'));
+                document.querySelector(`.fc-day[data-date="${dataSelecionada}"]`).classList.add('fc-day-selected');
             },
-            eventClick: function(info) {
-                horaInput.value = info.event.startStr.split('T')[1].slice(0,5); // HH:MM
-                submitBtn.disabled = false;
+            businessHours: {
+                daysOfWeek: [], // Carregado dinamicamente baseado no profissional
+                startTime: '08:00',
+                endTime: '18:00'
             },
-            events: [], // Carregado dinamicamente
             validRange: {
-                start: '{{ min_date }}' // Data mínima amanhã
+                start: '{{ min_date }}'
             },
             dayCellClassNames: function(arg) {
                 if (arg.isPast) {
                     return ['fc-day-past'];
                 }
-                // Dias disponíveis serão destacados pelo backend, mas aqui podemos adicionar classes base
                 return [];
             }
         });
         calendar.render();
 
-        // Carregar categorias
-        console.log("Carregando categorias via /api/categorias");
-        fetch('/api/categorias')
-            .then(res => {
-                console.log(`Resposta de /api/categorias: ${res.status}`);
-                return res.json();
-            })
-            .then(data => {
-                console.log("Categorias recebidas:", data);
-                if (data.length === 0) {
-                    console.warn("Nenhuma categoria retornada");
-                    alert("Nenhuma categoria disponível. Contate o suporte.");
-                    return;
-                }
-                data.forEach(cat => {
-                    const option = document.createElement('option');
-                    option.value = cat;
-                    option.textContent = cat;
-                    categoriaSelect.appendChild(option);
-                });
-                categoriaSelect.disabled = false;
-            })
-            .catch(err => {
-                console.error("Erro ao carregar categorias:", err);
-                alert("Erro ao carregar categorias. Tente novamente.");
-            });
+        // Carregar categorias no primeiro select
+        carregarCategorias('categoria-1');
 
-        // Carregar serviços como checkboxes
-        categoriaSelect.addEventListener('change', () => {
-            const categoria = categoriaSelect.value;
-            console.log(`Categoria selecionada: ${categoria}`);
-            servicosCheckboxes.innerHTML = '';
-            profissionalGroup.style.display = 'none';
-            calendarioGroup.style.display = 'none';
-            totalInfo.textContent = 'Total: Preço R$ 0,00';
-            submitBtn.disabled = true;
-
-            if (categoria) {
-                console.log(`Carregando serviços para categoria: ${categoria}`);
-                fetch(`/api/servicos?categoria=${encodeURIComponent(categoria)}`)
-                    .then(res => {
-                        console.log(`Resposta de /api/servicos: ${res.status}`);
-                        return res.json();
-                    })
-                    .then(data => {
-                        console.log("Serviços recebidos:", data);
-                        servicosData = data;
-                        if (data.length === 0) {
-                            console.warn("Nenhum serviço retornado para categoria:", categoria);
-                            alert("Nenhum serviço disponível para esta categoria.");
-                            return;
-                        }
-                        data.forEach(servico => {
-                            const label = document.createElement('label');
-                            const checkbox = document.createElement('input');
-                            checkbox.type = 'checkbox';
-                            checkbox.value = servico.id_servico;
-                            checkbox.name = 'id_servicos[]';
-                            label.appendChild(checkbox);
-                            label.appendChild(document.createTextNode(` ${servico.nome} (${servico.duracao_minutos} min, R$ ${servico.preco})`));
-                            servicosCheckboxes.appendChild(label);
-                        });
-                        servicoGroup.style.display = 'block';
-                    })
-                    .catch(err => {
-                        console.error("Erro ao carregar serviços:", err);
-                        alert("Erro ao carregar serviços. Tente novamente.");
-                    });
-            } else {
-                servicoGroup.style.display = 'none';
-            }
+        // Botão para adicionar outra categoria
+        addCategoriaBtn.addEventListener('click', () => {
+            categoriaCount++;
+            const newGroup = document.createElement('div');
+            newGroup.classList.add('form-group', 'categoria-group');
+            newGroup.innerHTML = `
+                <label for="categoria-${categoriaCount}">Outra Categoria:</label>
+                <select id="categoria-${categoriaCount}" class="categoria" required>
+                    <option value="">-- Escolha uma Categoria --</option>
+                </select>
+                <div id="servicos-checkboxes-${categoriaCount}" class="servicos-checkboxes"></div>
+            `;
+            categoriasContainer.appendChild(newGroup);
+            carregarCategorias(`categoria-${categoriaCount}`);
         });
 
+        function carregarCategorias(selectId) {
+            const categoriaSelect = document.getElementById(selectId);
+            console.log(`Carregando categorias para select: ${selectId}`);
+            fetch('/api/categorias')
+                .then(res => res.json())
+                .then(data => {
+                    data.forEach(cat => {
+                        const option = document.createElement('option');
+                        option.value = cat;
+                        option.textContent = cat;
+                        categoriaSelect.appendChild(option);
+                    });
+                })
+                .catch(err => console.error('Erro ao carregar categorias:', err));
+
+            categoriaSelect.addEventListener('change', () => {
+                const categoria = categoriaSelect.value;
+                const checkboxesId = `servicos-checkboxes-${selectId.split('-')[1]}`;
+                const servicosCheckboxes = document.getElementById(checkboxesId);
+                servicosCheckboxes.innerHTML = '';
+                if (categoria) {
+                    fetch(`/api/servicos?categoria=${encodeURIComponent(categoria)}`)
+                        .then(res => res.json())
+                        .then(data => {
+                            servicosData[categoria] = data;
+                            data.forEach(servico => {
+                                const label = document.createElement('label');
+                                const checkbox = document.createElement('input');
+                                checkbox.type = 'checkbox';
+                                checkbox.value = servico.id_servico;
+                                checkbox.name = 'id_servicos[]';
+                                label.appendChild(checkbox);
+                                label.appendChild(document.createTextNode(` ${servico.nome} (${servico.duracao_minutos} min, R$ ${servico.preco})`));
+                                servicosCheckboxes.appendChild(label);
+                            });
+                        })
+                        .catch(err => console.error('Erro ao carregar serviços:', err));
+                }
+            });
+        }
+
         // Atualizar totais ao selecionar checkboxes
-        servicosCheckboxes.addEventListener('change', () => {
-            const selectedIds = Array.from(servicosCheckboxes.querySelectorAll('input:checked')).map(input => parseInt(input.value));
+        categoriasContainer.addEventListener('change', () => {
+            const selectedIds = Array.from(categoriasContainer.querySelectorAll('input:checked')).map(input => parseInt(input.value));
             if (selectedIds.length > 0) {
                 fetch('/api/calcular_total', {
                     method: 'POST',
@@ -353,17 +342,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
             if (idServico) {
                 fetch(`/api/profissionais/${idServico}`)
-                    .then(res => {
-                        console.log(`Resposta de /api/profissionais: ${res.status}`);
-                        return res.json();
-                    })
+                    .then(res => res.json())
                     .then(data => {
-                        console.log("Profissionais recebidos:", data);
-                        if (data.length === 0) {
-                            console.warn("Nenhum profissional retornado para serviço:", idServico);
-                            alert("Nenhum profissional disponível para este serviço.");
-                            return;
-                        }
                         data.forEach(prof => {
                             const option = document.createElement('option');
                             option.value = prof.id_profissional;
@@ -372,72 +352,86 @@ document.addEventListener('DOMContentLoaded', function () {
                         });
                         profissionalGroup.style.display = 'block';
                     })
-                    .catch(err => {
-                        console.error("Erro ao carregar profissionais:", err);
-                        alert("Erro ao carregar profissionais. Tente novamente.");
-                    });
+                    .catch(err => console.error('Erro ao carregar profissionais:', err));
             } else {
                 profissionalGroup.style.display = 'none';
             }
         }
 
-        // Mostrar calendário
+        // Atualizar calendário com dias de trabalho do profissional
         profissionalSelect.addEventListener('change', () => {
-            console.log(`Profissional selecionado: ${profissionalSelect.value}`);
-            if (profissionalSelect.value) {
-                calendarioGroup.style.display = 'block';
+            const idProfissional = profissionalSelect.value;
+            if (idProfissional) {
+                fetch(`/api/profissional/${idProfissional}`)
+                    .then(res => res.json())
+                    .then(data => {
+                        const daysMap = {
+                            'segunda': 1, 'terca': 2, 'quarta': 3, 'quinta': 4, 'sexta': 5, 'sabado': 6, 'domingo': 0
+                        };
+                        const daysOfWeek = data.dias_trabalho.map(d => daysMap[d.toLowerCase()]);
+                        calendar.setOption('businessHours', {
+                            daysOfWeek: daysOfWeek,
+                            startTime: data.horario_inicio,
+                            endTime: data.horario_fim
+                        });
+                        calendar.render();
+                        calendarioGroup.style.display = 'block';
+                    })
+                    .catch(err => console.error('Erro ao carregar dias de trabalho:', err));
             } else {
                 calendarioGroup.style.display = 'none';
                 submitBtn.disabled = true;
             }
         });
 
-         // Carregar horarios
+        // Carregar horários para o dia selecionado
         function carregarHorarios(data) {
             const idProfissional = profissionalSelect.value;
-            const selectedIds = Array.from(servicosCheckboxes.querySelectorAll('input:checked')).map(input => parseInt(input.value));
+            const selectedIds = Array.from(categoriasContainer.querySelectorAll('input:checked')).map(input => parseInt(input.value));
             console.log(`Carregando horários para data: ${data}, Profissional: ${idProfissional}, Serviços: ${selectedIds}`);
             fetch(`/api/horarios_disponiveis/${idProfissional}/${data}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id_servicos: selectedIds })
             })
-            .then(res => {
-                console.log(`Resposta de /api/horarios_disponiveis: ${res.status}`);
-                return res.json();
-            })
+            .then(res => res.json())
             .then(data => {
-                console.log("Horários recebidos:", data);
+                horaSelect.innerHTML = '<option value="">-- Escolha um Horário --</option>';
                 if (data.error) {
-                    console.warn("Erro retornado pela API:", data.error);
-                    alert(data.error || "Erro ao carregar horários. Tente novamente.");
+                    horariosMsg.style.display = 'block';
+                    horariosMsg.textContent = data.error;
                     return;
                 }
-                calendar.removeAllEvents();
                 if (data.length === 0) {
                     horariosMsg.style.display = 'block';
                     horariosMsg.textContent = 'Nenhum horário disponível para esta data.';
-                    console.warn("Nenhum horário disponível para:", { idProfissional, data, selectedIds });
                     return;
                 }
                 horariosMsg.style.display = 'none';
                 data.forEach(hora => {
-                    calendar.addEvent({
-                        title: hora,
-                        start: `${data}T${hora}:00`
-                    });
+                    const option = document.createElement('option');
+                    option.value = hora;
+                    option.textContent = hora;
+                    horaSelect.appendChild(option);
                 });
             })
             .catch(err => {
                 console.error("Erro ao carregar horários:", err);
-                alert("Erro ao carregar horários. Tente novamente.");
+                horariosMsg.style.display = 'block';
+                horariosMsg.textContent = "Erro ao carregar horários. Tente novamente.";
             });
         }
+
+        // Habilitar botão ao selecionar horário
+        horaSelect.addEventListener('change', () => {
+            console.log(`Horário selecionado: ${horaSelect.value}`);
+            submitBtn.disabled = !horaSelect.value;
+        });
 
         // Validação e submissão do formulário
         agendamentoForm.addEventListener('submit', function(event) {
             event.preventDefault();
-            const selectedIds = Array.from(servicosCheckboxes.querySelectorAll('input:checked')).map(input => parseInt(input.value));
+            const selectedIds = Array.from(categoriasContainer.querySelectorAll('input:checked')).map(input => parseInt(input.value));
             const formData = new FormData(this);
             formData.set('id_servicos', JSON.stringify(selectedIds));
             fetch('/api/agendar', {
