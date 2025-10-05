@@ -1,9 +1,10 @@
 from flask import Flask, render_template, request, redirect, session, url_for, jsonify
 import logging
 from supabase import create_client, Client
-from datetime import datetime, timedelta, time
+from datetime import datetime, timedelta
 import os
 import zoneinfo
+import math
 
 # Configuração de logging
 logging.basicConfig(
@@ -235,7 +236,6 @@ def logout():
     logger.info("Usuário deslogado")
     return redirect(url_for("index"))
 
-# Rotas para agendamento
 @app.route("/agendamento")
 def agendamento():
     logger.info("Acessando rota /agendamento")
@@ -245,6 +245,27 @@ def agendamento():
     min_date = (datetime.now(TZ) + timedelta(days=1)).strftime('%Y-%m-%d')
     logger.debug("Renderizando agendamento.html com min_date: %s", min_date)
     return render_template("agendamento.html", user=get_user(), min_date=min_date)
+
+# API: Calcular total de serviços
+@app.route("/api/calcular_total", methods=["POST"])
+def api_calcular_total():
+    logger.info("Acessando API /api/calcular_total")
+    data = request.json
+    id_servicos = data.get('id_servicos', [])
+    if not supabase or not id_servicos:
+        return jsonify({"duracao_total": 0, "preco_total": 0.0})
+
+    try:
+        servicos = supabase.table("servicos").select("duracao_minutos, preco").in_("id_servico", id_servicos).execute().data
+        duracao_total = sum(s['duracao_minutos'] for s in servicos)
+        preco_total = sum(s['preco'] for s in servicos)
+        buffer_extra = math.floor(duracao_total / 20) * 5
+        duracao_total += buffer_extra
+        logger.debug("Totais calculados: duracao=%s, preco=%s", duracao_total, preco_total)
+        return jsonify({"duracao_total": duracao_total, "preco_total": preco_total})
+    except Exception as e:
+        logger.error("Erro ao calcular total: %s", str(e))
+        return jsonify({"duracao_total": 0, "preco_total": 0.0}), 500
 
 # API: Listar categorias distintas
 @app.route("/api/categorias")
@@ -297,13 +318,23 @@ def api_profissionais(id_servico):
     logger.warning("Supabase não inicializado")
     return jsonify([])
 
-# API: Horários disponíveis
-@app.route("/api/horarios_disponiveis/<int:id_profissional>/<data>/<int:id_servico>")
-def api_horarios_disponiveis(id_profissional, data, id_servico):
-    logger.info("Acessando API /api/horarios_disponiveis/%s/%s/%s", id_profissional, data, id_servico)
+# API: Horários disponíveis (agora recebe lista de serviços)
+@app.route("/api/horarios_disponiveis/<int:id_profissional>/<data>", methods=["POST"])
+def api_horarios_disponiveis(id_profissional, data):
+    logger.info("Acessando API /api/horarios_disponiveis/%s/%s", id_profissional, data)
+    data_post = request.json
+    id_servicos = data_post.get('id_servicos', [])
     if not supabase:
         logger.error("Supabase não inicializado")
         return jsonify({"error": "Servidor de banco de dados não disponível"}), 500
+
+    try:
+        # Calcular duração total com buffer
+        servicos = supabase.table("servicos").select("duracao_minutos").in_("id_servico", id_servicos).execute().data
+        duracao_total = sum(s['duracao_minutos'] for s in servicos)
+        buffer_extra = math.floor(duracao_total / 20) * 5
+        duracao_total += buffer_extra
+        logger.debug("Duração total ajustada: %s min", duracao_total)
 
     try:
         # Consultar profissional
@@ -390,7 +421,7 @@ def api_horarios_disponiveis(id_profissional, data, id_servico):
         disponiveis = []
         for slot in slots:
             slot_start = datetime.strptime(slot, '%H:%M')
-            slot_end = slot_start + timedelta(minutes=duracao)
+            slot_end = slot_start + timedelta(minutes=duracao_total)
             livre = True
             for occ_start, occ_end in occupied:
                 if not (slot_end <= occ_start or slot_start >= occ_end):
@@ -402,10 +433,10 @@ def api_horarios_disponiveis(id_profissional, data, id_servico):
 
         return jsonify(disponiveis)
     except Exception as e:
-        logger.error("Erro ao calcular horários disponíveis - Profissional: %s, Data: %s, Serviço: %s, Erro: %s", id_profissional, data, id_servico, str(e))
+        logger.error("Erro ao calcular horários disponíveis - Profissional: %s, Data: %s, Serviços: %s, Erro: %s", id_profissional, data, id_servicos, str(e))
         return jsonify({"error": f"Erro ao calcular horários: {str(e)}"}), 500
 
-# API: Salvar agendamento
+# API: Salvar agendamento (agora com serviços múltiplos)
 @app.route("/api/agendar", methods=["POST"])
 def api_agendar():
     logger.info("Acessando API /api/agendar")
@@ -414,18 +445,27 @@ def api_agendar():
         return jsonify({"success": False, "error": "Não autenticado"}), 401
 
     data = request.json
-    logger.debug("Dados recebidos para agendamento: %s", data)
-    required = ['id_servico', 'id_profissional', 'data_agendamento', 'hora_agendamento']
+    required = ['id_servicos', 'id_profissional', 'data_agendamento', 'hora_agendamento']
     if not all(k in data for k in required):
         logger.error("Campos obrigatórios faltando: %s", required)
         return jsonify({"success": False, "error": "Campos obrigatórios faltando"}), 400
 
+    id_servicos = data['id_servicos']
+    # Calcular totais
+    servicos = supabase.table("servicos").select("duracao_minutos, preco").in_("id_servico", id_servicos).execute().data
+    duracao_total = sum(s['duracao_minutos'] for s in servicos)
+    buffer_extra = math.floor(duracao_total / 20) * 5
+    duracao_total += buffer_extra
+    preco_total = sum(s['preco'] for s in servicos)
+
     new_agend = {
         'id_cliente': get_user()['id_cliente'],
-        'id_servico': int(data['id_servico']),
+        'servicos_ids': id_servicos,
         'id_profissional': int(data['id_profissional']),
         'data_agendamento': data['data_agendamento'],
         'hora_agendamento': data['hora_agendamento'],
+        'duracao_total': duracao_total,
+        'preco_total': preco_total,
         'status': 'pendente',
         'observacoes': data.get('observacoes', ''),
         'created_at': datetime.now(TZ).isoformat()
@@ -433,7 +473,6 @@ def api_agendar():
     logger.debug("Novo agendamento a ser inserido: %s", new_agend)
 
     try:
-        logger.debug("Inserindo agendamento no Supabase")
         supabase.table('agendamentos').insert(new_agend).execute()
         logger.info("Agendamento salvo com sucesso")
         return jsonify({"success": True})
