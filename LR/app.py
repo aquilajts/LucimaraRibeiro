@@ -466,6 +466,21 @@ def api_agendar():
         logger.error("Erro ao agendar: %s", str(e))
         return jsonify({"success": False, "error": "Erro ao salvar agendamento"}), 500
 
+
+# API: Detalhes do profissional (para dias de trabalho)
+@app.route("/api/profissional/<int:id_profissional>")
+def api_profissional(id_profissional):
+    logger.info("Acessando API /api/profissional/%s", id_profissional)
+    if supabase:
+        try:
+            prof = supabase.table("profissionais").select("horario_inicio, horario_fim, dias_trabalho").eq("id_profissional", id_profissional).single().execute().data
+            return jsonify(prof)
+        except Exception as e:
+            logger.error("Erro ao consultar profissional: %s", str(e))
+            return jsonify({"error": "Profissional não encontrado"}), 404
+    return jsonify({"error": "Supabase não inicializado"}), 500
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     logger.info("Iniciando servidor na porta %s", port)
