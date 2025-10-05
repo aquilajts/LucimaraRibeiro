@@ -374,3 +374,41 @@ select[multiple] {
 .fc-day-disabled {
     background-color: #ccc; /* Dias indisponíveis */
 }
+
+/* =========================
+   Chekbox dos serviços
+========================= */
+
+/* Estilos para checkboxes de serviços */
+#servicos-checkboxes {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 10px;
+}
+
+#servicos-checkboxes label {
+    display: block;
+    margin-bottom: 5px;
+}
+
+/* Estilos para FullCalendar */
+.fc-day-past, .fc-day-future.fc-day-disabled {
+    opacity: 0.3; /* Dias indisponíveis transparentes */
+}
+
+.fc-day-future:not(.fc-day-disabled) {
+    background-color: #fce4ec; /* Dias disponíveis destacados (rosa claro) */
+}
+
+.fc-event {
+    background-color: #d81b60; /* Rosa escuro para eventos */
+    border: none;
+    color: #fff;
+    cursor: pointer;
+}
+
+.fc-daygrid-day-number {
+    color: #333;
+}
