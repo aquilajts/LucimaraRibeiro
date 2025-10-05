@@ -412,3 +412,71 @@ select[multiple] {
 .fc-daygrid-day-number {
     color: #333;
 }
+
+/* mudança do fullcalendar edição #010 */
+
+/* Estilos para categorias múltiplas */
+.categoria-group {
+    margin-bottom: 20px;
+}
+
+#add-categoria {
+    margin-bottom: 20px;
+    background-color: #ad1457;
+    color: #fff;
+    border: none;
+    padding: 10px;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+#add-categoria:hover {
+    background-color: #d81b60;
+}
+
+/* Estilos para checkboxes de serviços */
+.servicos-checkboxes {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 10px;
+}
+
+.servicos-checkboxes label {
+    display: block;
+    margin-bottom: 5px;
+}
+
+/* Estilos para FullCalendar */
+.fc-day-past, .fc-day-disabled {
+    opacity: 0.3; /* Dias inativos transparentes */
+}
+
+.fc-day-future:not(.fc-day-disabled) {
+    background-color: #ffffff; /* Dias disponíveis nítidos (branco) */
+}
+
+.fc-day-selected {
+    background-color: #90ee90 !important; /* Dia selecionado em verde claro */
+}
+
+.fc-event {
+    background-color: #d81b60;
+    border: none;
+    color: #fff;
+    cursor: pointer;
+}
+
+.fc-daygrid-day-number {
+    color: #333;
+    font-weight: bold; /* Mais nítido */
+}
+
+#hora {
+    margin-top: 10px;
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+}
