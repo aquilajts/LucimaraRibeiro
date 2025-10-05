@@ -34,21 +34,19 @@
         {% endif %}
 
         <form id="agendamento-form" method="POST">
-            <div class="form-group">
-                <label for="categoria">Categoria do Serviço:</label>
-                <select id="categoria" name="categoria" required>
-                    <option value="">-- Escolha uma Categoria --</option>
-                    <!-- Carregado via JS -->
-                </select>
-            </div>
-
-            <div class="form-group" id="servico-group" style="display: none;">
-                <label>Selecione os Serviços:</label>
-                <div id="servicos-checkboxes">
-                    <!-- Checkboxes carregados via JS -->
+            <div id="categorias-container">
+                <div class="form-group categoria-group">
+                    <label for="categoria-1">Categoria do Serviço:</label>
+                    <select id="categoria-1" class="categoria" required>
+                        <option value="">-- Escolha uma Categoria --</option>
+                        <!-- Carregado via JS -->
+                    </select>
+                    <div id="servicos-checkboxes-1" class="servicos-checkboxes"></div>
                 </div>
-                <p id="total-info" style="margin-top: 10px; font-weight: bold;">Total: Preço R$ 0,00</p>
             </div>
+            <button type="button" id="add-categoria" class="btn-secondary">Adicionar outra categoria</button>
+
+            <p id="total-info" style="margin-top: 10px; font-weight: bold;">Total: Preço R$ 0,00</p>
 
             <div class="form-group" id="profissional-group" style="display: none;">
                 <label for="profissional">Selecione o Profissional:</label>
@@ -59,11 +57,15 @@
             </div>
 
             <div class="form-group" id="calendario-group" style="display: none;">
-                <label>Selecione a Data e Horário:</label>
+                <label>Selecione a Data:</label>
                 <div id="calendar"></div>
+                <label>Horários Disponíveis:</label>
+                <select id="hora" name="hora_agendamento" required>
+                    <option value="">-- Escolha um Horário --</option>
+                    <!-- Carregado via JS -->
+                </select>
                 <p id="horarios-msg" style="text-align: center; color: #ad1457; display: none;">Nenhum horário disponível para esta data.</p>
                 <input type="hidden" id="data_agendamento" name="data_agendamento">
-                <input type="hidden" id="hora_agendamento" name="hora_agendamento">
             </div>
 
             <div class="form-group">
