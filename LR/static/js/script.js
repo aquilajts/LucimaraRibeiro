@@ -501,6 +501,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         const horaSelect = document.getElementById('hora');
         const dataInput = document.getElementById('data_agendamento');
         const submitBtn = agendamentoForm.querySelector('.btn');
+        // Suporte ao markup legado (uma única categoria)
+        const legacyCategoriaSelect = document.getElementById('categoria-select');
+        const legacyServicosContainer = document.getElementById('servicos-por-categoria-container');
 
         let servicosData = {};
         let calendar;
@@ -523,6 +526,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             dayCellClassNames: function(arg) { return arg.isPast ? ['fc-day-past'] : []; }
         });
         calendar.render();
+
+        function getSelectedServiceIds() {
+            const checked = categoriasContainer
+                ? categoriasContainer.querySelectorAll('input:checked')
+                : (legacyServicosContainer ? legacyServicosContainer.querySelectorAll('input:checked') : []);
+            return Array.from(checked).map(input => parseInt(input.value));
+        }
 
         function carregarCategorias(selectId) {
             const categoriaSelect = document.getElementById(selectId);
@@ -569,8 +579,57 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
         }
 
-        carregarCategorias('categoria-1');
-        addCategoriaBtn.addEventListener('click', () => {
+        // Fluxo legado: única categoria com IDs antigos
+        function initLegacyCategoriaFlow() {
+            if (!legacyCategoriaSelect || !legacyServicosContainer) return;
+            legacyCategoriaSelect.innerHTML = '<option value="">Carregando categorias...</option>';
+            fetch('/api/categorias')
+                .then(res => res.json())
+                .then(lista => {
+                    legacyCategoriaSelect.innerHTML = '<option value="">-- Escolha uma Categoria --</option>';
+                    lista.forEach(cat => {
+                        const opt = document.createElement('option');
+                        opt.value = cat;
+                        opt.textContent = cat;
+                        legacyCategoriaSelect.appendChild(opt);
+                    });
+                })
+                .catch(err => console.error('Erro ao carregar categorias (legado):', err));
+
+            legacyCategoriaSelect.addEventListener('change', () => {
+                const categoria = legacyCategoriaSelect.value;
+                legacyServicosContainer.innerHTML = '';
+                if (!categoria) return;
+                fetch(`/api/servicos?categoria=${encodeURIComponent(categoria)}`)
+                    .then(res => res.json())
+                    .then(data => {
+                        servicosData[categoria] = data;
+                        data.forEach(servico => {
+                            const label = document.createElement('label');
+                            const checkbox = document.createElement('input');
+                            checkbox.type = 'checkbox';
+                            checkbox.value = servico.id_servico;
+                            checkbox.name = 'id_servicos[]';
+                            label.appendChild(checkbox);
+                            const dur = servico.duracao_minutos != null ? `${servico.duracao_minutos} min` : '—';
+                            const preco = servico.preco != null ? `R$ ${servico.preco}` : '—';
+                            label.appendChild(document.createTextNode(` ${servico.nome} (${dur}, ${preco})`));
+                            legacyServicosContainer.appendChild(label);
+                        });
+                    })
+                    .catch(err => console.error('Erro ao carregar serviços (legado):', err));
+            });
+        }
+
+        // Inicia o fluxo adequado conforme o HTML presente
+        if (document.getElementById('categoria-1')) {
+            carregarCategorias('categoria-1');
+        } else if (legacyCategoriaSelect) {
+            initLegacyCategoriaFlow();
+        }
+
+        if (addCategoriaBtn) {
+            addCategoriaBtn.addEventListener('click', () => {
             categoriaCount++;
             const newGroup = document.createElement('div');
             newGroup.classList.add('form-group', 'categoria-group');
@@ -583,10 +642,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             `;
             categoriasContainer.appendChild(newGroup);
             carregarCategorias(`categoria-${categoriaCount}`);
-        });
+            });
+        }
 
-        categoriasContainer.addEventListener('change', () => {
-            const selectedIds = Array.from(categoriasContainer.querySelectorAll('input:checked')).map(input => parseInt(input.value));
+        const onServicesChange = () => {
+            const selectedIds = getSelectedServiceIds();
             if (selectedIds.length > 0) {
                 fetch('/api/calcular_total', {
                     method: 'POST',
@@ -603,7 +663,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 totalInfo.textContent = 'Total: Preço R$ 0,00';
                 profissionalGroup.style.display = 'none';
             }
-        });
+        };
+        if (categoriasContainer) categoriasContainer.addEventListener('change', onServicesChange);
+        if (legacyServicosContainer) legacyServicosContainer.addEventListener('change', onServicesChange);
 
         function carregarProfissionaisParaAgendamento(idServico) {
             profissionalSelect.innerHTML = '<option value="">-- Escolha um Profissional --</option>';
@@ -651,7 +713,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         function carregarHorarios(data) {
             const idProfissional = profissionalSelect.value;
-            const selectedIds = Array.from(categoriasContainer.querySelectorAll('input:checked')).map(input => parseInt(input.value));
+            const selectedIds = getSelectedServiceIds();
             fetch(`/api/horarios_disponiveis/${idProfissional}/${data}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -689,7 +751,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         agendamentoForm.addEventListener('submit', function(event) {
             event.preventDefault();
-            const selectedIds = Array.from(categoriasContainer.querySelectorAll('input:checked')).map(input => parseInt(input.value));
+            const selectedIds = getSelectedServiceIds();
             const formData = new FormData(this);
             formData.set('id_servicos', JSON.stringify(selectedIds));
             fetch('/api/agendar', {
