@@ -439,13 +439,23 @@ def api_horarios_disponiveis(id_profissional, data):
 
         # Consultar agendamentos existentes
         logger.debug("Consultando agendamentos para profissional %s na data %s", id_profissional, data)
-        agends = supabase.table("agendamentos").select("hora_agendamento, duracao_total").eq("id_profissional", id_profissional).eq("data_agendamento", data).eq("status", "pendente").execute().data
+        # Considera agendamentos que bloqueiam horário: pendentes e agendados
+        agends = supabase.table("agendamentos") \
+            .select("hora_agendamento, duracao_total") \
+            .eq("id_profissional", id_profissional) \
+            .eq("data_agendamento", data) \
+            .in_("status", ["🟡Pendente", "🔵Agendado"]) \
+            .execute().data
         logger.debug("Agendamentos encontrados: %s", agends)
 
         occupied = []
         for ag in agends:
             try:
-                hora_start = datetime.strptime(ag['hora_agendamento'], '%H:%M')
+                # Tenta com segundos e depois sem segundos para compatibilidade
+                try:
+                    hora_start = datetime.strptime(ag['hora_agendamento'], '%H:%M:%S')
+                except ValueError:
+                    hora_start = datetime.strptime(ag['hora_agendamento'], '%H:%M')
                 duracao = ag.get('duracao_total', 0) or 60  # Fallback se duracao_total não estiver definido
                 hora_end = hora_start + timedelta(minutes=duracao)
                 occupied.append((hora_start, hora_end))
