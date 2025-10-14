@@ -508,6 +508,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         let servicosData = {};
         let calendar;
         let categoriaCount = 1;
+        // Guarda os dias de trabalho do profissional selecionado (0=Dom .. 6=Sáb)
+        let diasTrabalhoIndices = [];
 
         // Calcula minDate localmente (D+1)
         const minDate = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().split('T')[0]; })();
@@ -515,15 +517,33 @@ document.addEventListener('DOMContentLoaded', async () => {
         calendar = new FullCalendar.Calendar(calendarEl, {
             initialView: 'dayGridMonth',
             selectable: true,
+            selectAllow: function(selectionInfo) {
+                const date = selectionInfo.start;
+                if (!date || diasTrabalhoIndices.length === 0) return false;
+                const dow = date.getDay(); // 0 (Domingo) .. 6 (Sábado)
+                return diasTrabalhoIndices.includes(dow);
+            },
             select: function(info) {
-                dataInput.value = info.startStr;
-                carregarHorarios(info.startStr);
+                const dateStr = info.startStr;
+                const dow = info.start.getDay();
+                if (!diasTrabalhoIndices.includes(dow)) return; // segurança
+                dataInput.value = dateStr;
+                carregarHorarios(dateStr);
                 document.querySelectorAll('.fc-day-selected').forEach(el => el.classList.remove('fc-day-selected'));
-                document.querySelector(`.fc-day[data-date="${info.startStr}"]`).classList.add('fc-day-selected');
+                const cell = document.querySelector(`.fc-day[data-date="${dateStr}"]`);
+                if (cell) cell.classList.add('fc-day-selected');
             },
             businessHours: { daysOfWeek: [], startTime: '08:00', endTime: '18:00' },
             validRange: { start: minDate },
-            dayCellClassNames: function(arg) { return arg.isPast ? ['fc-day-past'] : []; }
+            dayCellClassNames: function(arg) {
+                const classes = [];
+                if (arg.isPast) classes.push('fc-day-past');
+                if (diasTrabalhoIndices.length > 0) {
+                    const dow = arg.date.getDay();
+                    classes.push(diasTrabalhoIndices.includes(dow) ? 'fc-day-available' : 'fc-day-unavailable');
+                }
+                return classes;
+            }
         });
         calendar.render();
 
@@ -696,11 +716,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                     .then(res => res.json())
                     .then(data => {
                         const daysMap = { 'segunda': 1, 'terca': 2, 'quarta': 3, 'quinta': 4, 'sexta': 5, 'sabado': 6, 'domingo': 0 };
+                        // Atualiza businessHours no calendário e guarda dias para colorização
+                        diasTrabalhoIndices = data.dias_trabalho.map(d => daysMap[d.toLowerCase()]);
                         calendar.setOption('businessHours', {
                             daysOfWeek: data.dias_trabalho.map(d => daysMap[d.toLowerCase()]),
                             startTime: data.horario_inicio,
                             endTime: data.horario_fim
                         });
+                        // Re-render para aplicar classes de disponível/indisponível
+                        calendar.rerenderDates();
                         calendar.render();
                         calendarioGroup.style.display = 'block';
                     })
