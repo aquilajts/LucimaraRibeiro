@@ -572,6 +572,20 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             categoriaSelect.addEventListener('change', () => {
                 const categoria = categoriaSelect.value;
+                // Impedir seleção de categoria duplicada
+                if (categoria) {
+                    const allSelects = Array.from(document.querySelectorAll('#categorias-container .categoria'));
+                    const values = allSelects.map(s => s.value).filter(Boolean);
+                    const duplicates = values.filter((v, i) => values.indexOf(v) !== i);
+                    if (duplicates.length > 0) {
+                        alert('Você já selecionou esta categoria. Escolha outra.');
+                        categoriaSelect.value = '';
+                        const checksId = `servicos-checkboxes-${selectId.split('-')[1]}`;
+                        const box = document.getElementById(checksId);
+                        if (box) box.innerHTML = '';
+                        return;
+                    }
+                }
                 const checkboxesId = `servicos-checkboxes-${selectId.split('-')[1]}`;
                 const servicosCheckboxes = document.getElementById(checkboxesId);
                 if (!servicosCheckboxes) return;
@@ -676,7 +690,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 .then(res => res.json())
                 .then(data => {
                     totalInfo.textContent = `Total: Preço R$ ${data.preco_total}`;
-                    carregarProfissionaisParaAgendamento(selectedIds[0]);
+                    carregarProfissionaisParaAgendamento(selectedIds);
                 })
                 .catch(err => console.error('Erro ao calcular total:', err));
             } else {
@@ -687,26 +701,45 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (categoriasContainer) categoriasContainer.addEventListener('change', onServicesChange);
         if (legacyServicosContainer) legacyServicosContainer.addEventListener('change', onServicesChange);
 
-        function carregarProfissionaisParaAgendamento(idServico) {
+        function carregarProfissionaisParaAgendamento(idServicosSelecionados) {
             profissionalSelect.innerHTML = '<option value="">-- Escolha um Profissional --</option>';
             calendarioGroup.style.display = 'none';
             submitBtn.disabled = true;
-            if (idServico) {
-                fetch(`/api/profissionais/${idServico}`)
-                    .then(res => res.json())
-                    .then(data => {
-                        data.forEach(prof => {
-                            const option = document.createElement('option');
-                            option.value = prof.id_profissional;
-                            option.textContent = prof.nome;
-                            profissionalSelect.appendChild(option);
-                        });
-                        profissionalGroup.style.display = 'block';
-                    })
-                    .catch(err => console.error('Erro ao carregar profissionais:', err));
-            } else {
+            horaSelect.innerHTML = '<option value="">-- Escolha um Horário --</option>';
+            horariosMsg.style.display = 'none';
+
+            if (!idServicosSelecionados || idServicosSelecionados.length === 0) {
                 profissionalGroup.style.display = 'none';
+                return;
             }
+
+            // Busca profissionais para cada serviço e faz interseção
+            const promises = idServicosSelecionados.map(id => fetch(`/api/profissionais/${id}`).then(r => r.json()));
+            Promise.all(promises)
+                .then(listas => {
+                    // Converte para conjuntos de id_profissional
+                    const sets = listas.map(lst => new Set(lst.map(p => p.id_profissional)));
+                    // Interseção
+                    const intersecao = sets.reduce((acc, s) => new Set([...acc].filter(x => s.has(x))));
+                    // Mapa de id -> nome (pega da primeira lista que tiver)
+                    const nomes = new Map();
+                    listas.flat().forEach(p => { if (intersecao.has(p.id_profissional)) nomes.set(p.id_profissional, p.nome); });
+
+                    if (intersecao.size === 0) {
+                        profissionalGroup.style.display = 'none';
+                        alert('Nenhum profissional atende todos os serviços selecionados.');
+                        return;
+                    }
+
+                    intersecao.forEach(id => {
+                        const option = document.createElement('option');
+                        option.value = id;
+                        option.textContent = nomes.get(id) || `Profissional ${id}`;
+                        profissionalSelect.appendChild(option);
+                    });
+                    profissionalGroup.style.display = 'block';
+                })
+                .catch(err => console.error('Erro ao carregar profissionais:', err));
         }
 
         profissionalSelect.addEventListener('change', () => {
@@ -724,8 +757,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                             endTime: data.horario_fim
                         });
                         // Re-render para aplicar classes de disponível/indisponível
-                        calendar.rerenderDates();
+                        // FullCalendar v5 não possui rerenderDates; chamar render() é suficiente
                         calendar.render();
+                        // Reset de horários ao trocar de profissional
+                        horaSelect.innerHTML = '<option value="">-- Escolha um Horário --</option>';
+                        horariosMsg.style.display = 'none';
                         calendarioGroup.style.display = 'block';
                     })
                     .catch(err => console.error('Erro ao carregar dias de trabalho:', err));
