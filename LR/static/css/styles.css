@@ -396,12 +396,33 @@ select[multiple] {
     opacity: 0.3;
 }
 
+/* Aparência base dos dias futuros */
 .fc-day-future:not(.fc-day-disabled) {
     background-color: #ffffff;
 }
 
+/* Dia selecionado */
 .fc-day-selected {
-    background-color: #90ee90 !important;
+    background-color: #c8f7c5 !important;
+    box-shadow: inset 0 0 0 2px #2e7d32;
+}
+
+/* Dias de trabalho (disponíveis) e não trabalhados (indisponíveis) */
+.fc-day-available {
+    background-color: #f2fff2 !important;
+}
+.fc-day-unavailable {
+    background-color: #ffe8e8 !important;
+    color: #8a1c1c !important;
+}
+
+/* Embeleza um pouco o calendário */
+#calendar .fc-daygrid-day,
+#calendar .fc-scrollgrid-sync-table {
+    border-radius: 6px;
+}
+#calendar .fc-toolbar-title {
+    color: #333;
 }
 
 /* =========================
@@ -418,6 +439,16 @@ select[multiple] {
 #servicos-checkboxes label {
     display: block;
     margin-bottom: 5px;
+}
+
+/* Empilhar serviços verticalmente também no fluxo legado */
+#servicos-por-categoria-container {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+#servicos-por-categoria-container label {
+    display: block;
 }
 
 /* =========================
@@ -452,6 +483,22 @@ select[multiple] {
 .servicos-checkboxes label {
     display: block;
     margin-bottom: 5px;
+}
+
+/* Estilo genérico para botões secundários (ex.: adicionar categoria) */
+.btn-secondary {
+    display: inline-block;
+    padding: 10px 16px;
+    border-radius: 8px;
+    border: none;
+    background-color: #ad1457;
+    color: #fff;
+    cursor: pointer;
+    transition: transform 0.2s ease, background-color 0.2s ease;
+}
+.btn-secondary:hover {
+    transform: scale(1.03);
+    background-color: #d81b60;
 }
 
 /* =========================
