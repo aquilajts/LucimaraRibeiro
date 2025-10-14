@@ -11,35 +11,40 @@ function formatarData(dataStr) {
     return `${dia}/${mes}/${ano}`;
 }
 
-// Carregar profissionais
-async function carregarProfissionais() {
-    console.log('Iniciando carregarProfissionais'); // Depuração
+// Carregar profissionais (tela de consulta de agendamentos)
+async function carregarProfissionaisFiltro() {
+    console.log('Iniciando carregarProfissionaisFiltro');
     try {
+        const select = document.getElementById('prof-select');
+        if (!select) {
+            // Página sem filtro de profissionais; não há nada para fazer
+            return;
+        }
+
         const response = await fetch('/api/profissionais');
         if (!response.ok) throw new Error(`HTTP ${response.status} - ${response.statusText}`);
         const data = await response.json();
-        const select = document.getElementById('prof-select');
-        if (!select) throw new Error('Elemento prof-select não encontrado');
-        select.innerHTML = '<option value="">Todos</option>'; // Reinicia com opção "Todos"
+        select.innerHTML = '<option value="">Todos</option>';
         data.forEach(prof => {
             const option = document.createElement('option');
             option.value = prof.id_profissional;
             option.textContent = prof.nome;
             select.appendChild(option);
         });
-        console.log('Profissionais carregados:', data); // Depuração
+        console.log('Profissionais (filtro) carregados:', data);
     } catch (error) {
-        console.error('Erro ao carregar profissionais:', error);
+        console.error('Erro ao carregar profissionais (filtro):', error);
     }
 }
 
 // Carregar status
 async function carregarStatus() {
     try {
+        const content = document.getElementById('status-dropdown-content');
+        if (!content) return; // Página sem dropdown de status
         const response = await fetch('/api/status');
         const data = await response.json();
-        const content = document.getElementById('status-dropdown-content');
-        content.innerHTML = ''; // Limpa o conteúdo
+        content.innerHTML = '';
         data.forEach(status => {
             const label = document.createElement('label');
             label.innerHTML = `<input type="checkbox" value="${status}" onchange="updateStatusFilter()"> ${status}`;
@@ -52,18 +57,24 @@ async function carregarStatus() {
 
 // Carregar agendamentos
 async function carregarAgendamentos() {
-    const profId = document.getElementById('prof-select').value;
-    const statusValues = Array.from(document.querySelectorAll('#status-dropdown-content input[type="checkbox"]:checked')).map(cb => cb.value);
-    const startDate = document.getElementById('start-date').value;
-    const endDate = document.getElementById('end-date').value;
+    // Só executa nesta página específica
+    const profSelect = document.getElementById('prof-select');
+    const tabela = document.getElementById('tabela-agendamentos');
+    const tbody = document.getElementById('corpo-tabela');
+    const titulo = document.getElementById('titulo-agendamentos');
     const loading = document.getElementById('loading');
     const error = document.getElementById('error');
-    const tbody = document.getElementById('corpo-tabela');
-    const tabela = document.getElementById('tabela-agendamentos');
-    const titulo = document.getElementById('titulo-agendamentos');
+    if (!profSelect || !tabela || !tbody || !titulo) return;
 
-    loading.style.display = 'block';
-    error.style.display = 'none';
+    const profId = profSelect.value;
+    const statusValues = Array.from(document.querySelectorAll('#status-dropdown-content input[type="checkbox"]:checked')).map(cb => cb.value);
+    const startDateEl = document.getElementById('start-date');
+    const endDateEl = document.getElementById('end-date');
+    const startDate = startDateEl ? startDateEl.value : '';
+    const endDate = endDateEl ? endDateEl.value : '';
+
+    if (loading) loading.style.display = 'block';
+    if (error) error.style.display = 'none';
     tabela.style.display = 'none';
 
     try {
@@ -88,7 +99,7 @@ async function carregarAgendamentos() {
         const data = await response.json();
         agendamentosAtuais = data;
 
-        loading.style.display = 'none';
+        if (loading) loading.style.display = 'none';
         tabela.style.display = 'table';
 
         if (!Array.isArray(data) || data.length === 0) {
@@ -118,9 +129,11 @@ async function carregarAgendamentos() {
         });
     } catch (error) {
         console.error('Erro ao carregar agendamentos:', error);
-        loading.style.display = 'none';
-        error.textContent = 'Erro ao carregar: ' + error.message;
-        error.style.display = 'block';
+        if (loading) loading.style.display = 'none';
+        if (error) {
+            error.textContent = 'Erro ao carregar: ' + error.message;
+            error.style.display = 'block';
+        }
     }
 }
 
@@ -128,7 +141,7 @@ async function carregarAgendamentos() {
 function atualizarEndDate() {
     const startDateInput = document.getElementById('start-date');
     const endDateInput = document.getElementById('end-date');
-    if (startDateInput.value) {
+    if (startDateInput && endDateInput && startDateInput.value) {
         const startDate = new Date(startDateInput.value);
         startDate.setDate(startDate.getDate() + 15);
         endDateInput.value = startDate.toISOString().split('T')[0];
@@ -234,16 +247,21 @@ function updateStatusFilter() {
 
 // Inicialização
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('DOM carregado, iniciando funções'); // Depuração
+    console.log('DOM carregado, iniciando funções');
     try {
-        await carregarProfissionais();
-        await carregarStatus();
-        carregarAgendamentos();
-        const today = new Date().toISOString().split('T')[0]; // 2025-10-12 14:19:00 -03
-        const startDateInput = document.getElementById('start-date');
-        if (!startDateInput) throw new Error('Elemento start-date não encontrado');
-        startDateInput.value = today;
-        atualizarEndDate();
+        const isConsultaPage = !!document.getElementById('prof-select');
+        if (isConsultaPage) {
+            await carregarProfissionaisFiltro();
+            await carregarStatus();
+            const today = new Date().toISOString().split('T')[0];
+            const startDateInput = document.getElementById('start-date');
+            if (startDateInput) {
+                startDateInput.value = today;
+                atualizarEndDate();
+            }
+            await carregarAgendamentos();
+        }
+        // Inicializa eventos do modal se existir
         initModalEvents();
     } catch (error) {
         console.error('Erro na inicialização:', error);
@@ -488,6 +506,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         let calendar;
         let categoriaCount = 1;
 
+        // Calcula minDate localmente (D+1)
+        const minDate = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().split('T')[0]; })();
+
         calendar = new FullCalendar.Calendar(calendarEl, {
             initialView: 'dayGridMonth',
             selectable: true,
@@ -498,13 +519,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                 document.querySelector(`.fc-day[data-date="${info.startStr}"]`).classList.add('fc-day-selected');
             },
             businessHours: { daysOfWeek: [], startTime: '08:00', endTime: '18:00' },
-            validRange: { start: '{{ min_date }}' },
+            validRange: { start: minDate },
             dayCellClassNames: function(arg) { return arg.isPast ? ['fc-day-past'] : []; }
         });
         calendar.render();
 
         function carregarCategorias(selectId) {
             const categoriaSelect = document.getElementById(selectId);
+            if (!categoriaSelect) {
+                console.warn('Select de categoria não encontrado:', selectId);
+                return;
+            }
             fetch('/api/categorias')
                 .then(res => res.json())
                 .then(data => data.forEach(cat => {
@@ -519,6 +544,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const categoria = categoriaSelect.value;
                 const checkboxesId = `servicos-checkboxes-${selectId.split('-')[1]}`;
                 const servicosCheckboxes = document.getElementById(checkboxesId);
+                if (!servicosCheckboxes) return;
                 servicosCheckboxes.innerHTML = '';
                 if (categoria) {
                     fetch(`/api/servicos?categoria=${encodeURIComponent(categoria)}`)
@@ -532,7 +558,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 checkbox.value = servico.id_servico;
                                 checkbox.name = 'id_servicos[]';
                                 label.appendChild(checkbox);
-                                label.appendChild(document.createTextNode(` ${servico.nome} (${servico.duracao_minutos} min, R$ ${servico.preco})`));
+                                const dur = servico.duracao_minutos != null ? `${servico.duracao_minutos} min` : '—';
+                                const preco = servico.preco != null ? `R$ ${servico.preco}` : '—';
+                                label.appendChild(document.createTextNode(` ${servico.nome} (${dur}, ${preco})`));
                                 servicosCheckboxes.appendChild(label);
                             });
                         })
@@ -568,7 +596,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 .then(res => res.json())
                 .then(data => {
                     totalInfo.textContent = `Total: Preço R$ ${data.preco_total}`;
-                    carregarProfissionais(selectedIds[0]);
+                    carregarProfissionaisParaAgendamento(selectedIds[0]);
                 })
                 .catch(err => console.error('Erro ao calcular total:', err));
             } else {
@@ -577,7 +605,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         });
 
-        function carregarProfissionais(idServico) {
+        function carregarProfissionaisParaAgendamento(idServico) {
             profissionalSelect.innerHTML = '<option value="">-- Escolha um Profissional --</option>';
             calendarioGroup.style.display = 'none';
             submitBtn.disabled = true;

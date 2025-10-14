@@ -315,10 +315,19 @@ def api_categorias():
 # API: Listar serviços por categoria
 @app.route("/api/servicos")
 def api_servicos():
+    """Lista serviços, opcionalmente filtrando por categoria, retornando dados completos.
+
+    Query params:
+    - categoria: string (opcional)
+    """
     if not supabase:
         return jsonify([])
     try:
-        response = supabase.table("servicos").select("id_servico, nome").execute()
+        categoria = request.args.get("categoria")
+        query = supabase.table("servicos").select("id_servico, nome, categoria, duracao_minutos, preco").eq("ativo", True)
+        if categoria:
+            query = query.eq("categoria", categoria)
+        response = query.order("nome").execute()
         return jsonify(response.data or [])
     except Exception as e:
         logger.error("Erro serviços: %s", str(e))
