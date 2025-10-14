@@ -724,7 +724,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                             endTime: data.horario_fim
                         });
                         // Re-render para aplicar classes de disponível/indisponível
-                        calendar.rerenderDates();
                         calendar.render();
                         calendarioGroup.style.display = 'block';
                     })
