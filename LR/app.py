@@ -295,7 +295,7 @@ def api_calcular_total():
         return jsonify({"success": False, "error": "Erro ao calcular totais"}), 500
     
 
-# API: Listar categorias distintas
+# API: Listar categorias disttintas
 @app.route("/api/categorias")
 def api_categorias():
     logger.info("Acessando API /api/categorias")

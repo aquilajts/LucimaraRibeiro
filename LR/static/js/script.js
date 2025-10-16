@@ -833,4 +833,4 @@ document.addEventListener('DOMContentLoaded', async () => {
                 resetButton(this);
             });
         });
-    }  // Fim correto do if (agendamentoForm) com indentação alinhada
+    }  // Fim correto do if (agendamentoForm) com indentação alinhadaa

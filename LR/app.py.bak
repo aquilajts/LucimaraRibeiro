@@ -896,7 +896,7 @@ def api_agendamento(id):
             logger.error(f"Erro PUT ao atualizar agendamento {id}: {str(e)}")
             return jsonify({"error": str(e)}), 500
 
-# Certifique-se de que o bloco acima está fechado antes da próxima rota
+# Certifiquue-se de que o bloco acima está fechado antes da próxima rota
 @app.route("/api/teste/<int:id_profissional>")
 def teste_api(id_profissional):
     return jsonify({
