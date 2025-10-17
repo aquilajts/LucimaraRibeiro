@@ -89,6 +89,13 @@ def _normalize_service_ids(ids):
         return tuple()
 
 
+def calcular_buffer_tempo(duracao_total):
+    """Adiciona 5 minutos de buffer a cada 35 minutos de serviço acumulado."""
+    if not duracao_total:
+        return 0
+    return math.floor(duracao_total / 35) * 5
+
+
 def supabase_execute_with_retry(callback, retries=3, delay=0.3):
     last_exc = None
     for attempt in range(retries):
@@ -620,7 +627,7 @@ def api_horarios_disponiveis(id_profissional, data):
             logger.error("Serviços não encontrados para cálculo de disponibilidade: %s", id_servicos)
             return jsonify({"error": "Serviços não encontrados"}), 404
         duracao_total = sum((s.get('duracao_minutos') or 0) for s in servicos)
-        buffer_extra = math.floor(duracao_total / 20) * 5
+        buffer_extra = calcular_buffer_tempo(duracao_total)
         duracao_total += buffer_extra
         logger.debug("Duração total ajustada: %s min", duracao_total)
         if duracao_total <= 0:
@@ -769,7 +776,7 @@ def api_agendar():
             logger.error("Nenhum serviço encontrado para IDs: %s", id_servicos)
             return jsonify({"success": False, "error": "Serviços não encontrados"}), 404
         duracao_total = sum((s.get('duracao_minutos') or 0) for s in servicos)
-        buffer_extra = math.floor(duracao_total / 20) * 5
+        buffer_extra = calcular_buffer_tempo(duracao_total)
         duracao_total += buffer_extra
         preco_total = sum(float(s.get('preco') or 0) for s in servicos)
         if duracao_total == 0 or preco_total == 0:
@@ -1142,7 +1149,7 @@ def api_agendamento(id):
                 servicos = supabase.table("servicos").select("duracao_minutos, preco").in_("id_servico", servicos_ids).execute().data
                 if servicos:
                     duracao_total = sum(s['duracao_minutos'] for s in servicos)
-                    buffer_extra = math.floor(duracao_total / 20) * 5
+                    buffer_extra = calcular_buffer_tempo(duracao_total)
                     duracao_total += buffer_extra
                     preco_total = sum(float(s['preco']) for s in servicos)
                     

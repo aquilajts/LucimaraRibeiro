@@ -4,11 +4,111 @@ console.log("Script loaded");
 let agendamentosAtuais = [];
 let agendamentoIdAtual = null;
 
+const STATUS_META = {
+    "🔴Não veio": { tone: "danger", label: "Não veio" },
+    "🟡Pendente": { tone: "warning", label: "Pendente" },
+    "🟢Atendido": { tone: "success", label: "Atendido" },
+    "🔵Agendado": { tone: "info", label: "Agendado" },
+    "⚫Pago": { tone: "neutral", label: "Pago" }
+};
+
+const HTML_ESCAPE_MAP = {
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+};
+
+function escapeHtml(value) {
+    if (value === null || value === undefined) return "";
+    return String(value).replace(/[&<>"']/g, ch => HTML_ESCAPE_MAP[ch] || ch);
+}
+
+function buildStatusChip(statusRaw) {
+    const raw = statusRaw || "🟡Pendente";
+    const meta = STATUS_META[raw] || { tone: "neutral", label: raw };
+    const label = meta.label || raw;
+    return `<span class="status-chip status-chip--${meta.tone}" title="${escapeHtml(label)}">${escapeHtml(raw)}</span>`;
+}
+
 // Função para formatar data
 function formatarData(dataStr) {
     if (!dataStr) return 'N/A';
     const [ano, mes, dia] = dataStr.split('-');
     return `${dia}/${mes}/${ano}`;
+}
+
+function criarAgendamentoCard(ag) {
+    const card = document.createElement('article');
+    card.className = 'booking-card';
+
+    const telefone = ag.cliente_telefone ? escapeHtml(ag.cliente_telefone) : '—';
+    const servicosLista = Array.isArray(ag.servicos_nomes) && ag.servicos_nomes.length
+        ? ag.servicos_nomes.map(escapeHtml).join(', ')
+        : 'N/A';
+    const precoNumero = Number(ag.preco_total ?? ag.preco ?? 0);
+    const precoFormatado = Number.isFinite(precoNumero) ? precoNumero.toFixed(2) : '0.00';
+    const statusChip = buildStatusChip(ag.status);
+
+    card.innerHTML = `
+        <button class="booking-card__toggle" type="button" aria-expanded="false">
+            <div class="booking-card__summary">
+                <div class="booking-card__summary-main">
+                    <span class="booking-card__date">${escapeHtml(formatarData(ag.data_agendamento))}</span>
+                    <span class="booking-card__time">${escapeHtml(ag.hora_agendamento || '—')}</span>
+                </div>
+                <div class="booking-card__summary-side">
+                    <span class="booking-card__client">${escapeHtml(ag.cliente_nome || 'Cliente não identificado')}</span>
+                    ${statusChip}
+                </div>
+            </div>
+            <span class="booking-card__chevron" aria-hidden="true"></span>
+        </button>
+        <div class="booking-card__details" hidden>
+            <dl class="booking-card__meta">
+                <div><dt>Telefone</dt><dd>${telefone}</dd></div>
+                <div><dt>Duração total</dt><dd>${escapeHtml(String(ag.duracao_total || 0))} min</dd></div>
+                <div><dt>Preço</dt><dd>R$ ${precoFormatado}</dd></div>
+                <div><dt>Status</dt><dd>${statusChip}</dd></div>
+            </dl>
+            <div class="booking-card__services">
+                <strong>Serviços</strong>
+                <p>${servicosLista}</p>
+            </div>
+            <div class="booking-card__footer">
+                <div class="booking-card__totals">
+                    <span>${escapeHtml(formatarData(ag.data_agendamento))} · ${escapeHtml(ag.hora_agendamento || '—')}</span>
+                    <span>R$ ${precoFormatado}</span>
+                </div>
+                <div class="booking-card__actions">
+                    <button type="button" class="details-btn" data-id="${escapeHtml(String(ag.id_agendamento))}">Gerenciar</button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    const toggleBtn = card.querySelector('.booking-card__toggle');
+    const details = card.querySelector('.booking-card__details');
+    const manageBtn = card.querySelector('.details-btn');
+
+    if (toggleBtn && details) {
+        toggleBtn.addEventListener('click', () => {
+            const isOpen = toggleBtn.getAttribute('aria-expanded') === 'true';
+            toggleBtn.setAttribute('aria-expanded', String(!isOpen));
+            details.hidden = isOpen;
+            card.classList.toggle('booking-card--open', !isOpen);
+        });
+    }
+
+    if (manageBtn) {
+        manageBtn.addEventListener('click', () => {
+            agendamentoIdAtual = ag.id_agendamento;
+            mostrarDetalhes(String(ag.id_agendamento));
+        });
+    }
+
+    return card;
 }
 
 // Carregar profissionais (tela de consulta de agendamentos)
@@ -59,12 +159,12 @@ async function carregarStatus() {
 async function carregarAgendamentos() {
     // Só executa nesta página específica
     const profSelect = document.getElementById('prof-select');
-    const tabela = document.getElementById('tabela-agendamentos');
-    const tbody = document.getElementById('corpo-tabela');
+    const listaWrapper = document.getElementById('tabela-agendamentos');
+    const lista = document.getElementById('corpo-tabela');
     const titulo = document.getElementById('titulo-agendamentos');
     const loading = document.getElementById('loading');
-    const error = document.getElementById('error');
-    if (!profSelect || !tabela || !tbody || !titulo) return;
+    const errorBox = document.getElementById('error');
+    if (!profSelect || !listaWrapper || !lista || !titulo) return;
 
     const profId = profSelect.value;
     const statusValues = Array.from(document.querySelectorAll('#status-dropdown-content input[type="checkbox"]:checked')).map(cb => cb.value);
@@ -74,8 +174,11 @@ async function carregarAgendamentos() {
     const endDate = endDateEl ? endDateEl.value : '';
 
     if (loading) loading.style.display = 'block';
-    if (error) error.style.display = 'none';
-    tabela.style.display = 'none';
+    if (errorBox) {
+        errorBox.style.display = 'none';
+        errorBox.textContent = '';
+    }
+    listaWrapper.style.display = 'none';
 
     try {
         let url = profId ? `/api/agendamentos_profissional/${profId}` : '/api/agendamentos_todos';
@@ -99,40 +202,26 @@ async function carregarAgendamentos() {
         const data = await response.json();
         agendamentosAtuais = data;
 
-        if (loading) loading.style.display = 'none';
-        tabela.style.display = 'table';
+    if (loading) loading.style.display = 'none';
+    listaWrapper.style.display = 'block';
 
         if (!Array.isArray(data) || data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:30px;color:#666;">Nenhum agendamento encontrado</td></tr>';
+            lista.innerHTML = '<div class="booking-card booking-card--empty" role="listitem">Nenhum agendamento encontrado para o filtro aplicado.</div>';
             return;
         }
 
-        tbody.innerHTML = '';
+        lista.innerHTML = '';
         data.forEach(ag => {
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td>${formatarData(ag.data_agendamento)}</td>
-                <td>${ag.hora_agendamento}</td>
-                <td>${ag.cliente_nome || 'Anônimo'}</td>
-                <td>${ag.cliente_telefone || '-'}</td>
-                <td>${ag.servicos_nomes ? ag.servicos_nomes.join(', ') : 'N/A'}</td>
-                <td>${ag.duracao_total} min</td>
-                <td>R$ ${parseFloat(ag.preco_total || 0).toFixed(2)}</td>
-                <td>${ag.status || '🟡Pendente'}</td>
-                <td>
-                    <button class="details-btn" onclick="mostrarDetalhes('${ag.id_agendamento}')">
-                        📋
-                    </button>
-                </td>
-            `;
-            tbody.appendChild(row);
+            const card = criarAgendamentoCard(ag);
+            card.setAttribute('role', 'listitem');
+            lista.appendChild(card);
         });
     } catch (error) {
         console.error('Erro ao carregar agendamentos:', error);
         if (loading) loading.style.display = 'none';
-        if (error) {
-            error.textContent = 'Erro ao carregar: ' + error.message;
-            error.style.display = 'block';
+        if (errorBox) {
+            errorBox.textContent = 'Erro ao carregar os agendamentos. Tente novamente em instantes.';
+            errorBox.style.display = 'flex';
         }
     }
 }
@@ -231,7 +320,11 @@ function initModalEvents() {
 // Funções para o dropdown de status
 function toggleStatusDropdown() {
     const content = document.getElementById('status-dropdown-content');
-    content.style.display = content.style.display === 'block' ? 'none' : 'block';
+    const button = document.getElementById('status-dropdown-btn');
+    if (!content || !button) return;
+    const isOpen = content.style.display === 'block';
+    content.style.display = isOpen ? 'none' : 'block';
+    button.setAttribute('aria-expanded', String(!isOpen));
 }
 
 function updateStatusFilter() {
@@ -242,6 +335,9 @@ function updateStatusFilter() {
     console.log('Status codificados:', encodedValues); // Depuração
     const btn = document.getElementById('status-dropdown-btn');
     btn.textContent = selectedValues.length > 0 ? selectedValues.join(', ') : 'Todos';
+    btn.setAttribute('aria-expanded', 'false');
+    const content = document.getElementById('status-dropdown-content');
+    if (content) content.style.display = 'none';
     carregarAgendamentos();
 }
 
