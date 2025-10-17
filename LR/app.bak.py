@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, redirect, session, url_for, jsonify
 import logging
 from supabase import create_client, Client
+from collections import defaultdict
 from datetime import datetime, timedelta, time
 import os
 import zoneinfo
@@ -16,7 +17,7 @@ load_dotenv(dotenv_path=dotenv_path)
 logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s [%(levelname)s] %(message)s',
-    handlers=[
+    handlers=[59
         logging.StreamHandler(),
         logging.FileHandler('app.log')
     ]
@@ -295,7 +296,7 @@ def api_calcular_total():
         return jsonify({"success": False, "error": "Erro ao calcular totais"}), 500
     
 
-# API: Listar categorias distintas
+# API: Listar categorias disttintas
 @app.route("/api/categorias")
 def api_categorias():
     logger.info("Acessando API /api/categorias")
@@ -315,14 +316,119 @@ def api_categorias():
 # API: Listar serviços por categoria
 @app.route("/api/servicos")
 def api_servicos():
+    """Lista serviços, opcionalmente filtrando por categoria, retornando dados completos.
+
+    Query params:
+    - categoria: string (opcional)
+    """
     if not supabase:
         return jsonify([])
     try:
-        response = supabase.table("servicos").select("id_servico, nome").execute()
+        categoria = request.args.get("categoria")
+        query = supabase.table("servicos").select("id_servico, nome, categoria, duracao_minutos, preco").eq("ativo", True)
+        if categoria:
+            query = query.eq("categoria", categoria)
+        response = query.order("nome").execute()
         return jsonify(response.data or [])
     except Exception as e:
         logger.error("Erro serviços: %s", str(e))
         return jsonify([])
+
+
+@app.route("/api/agendamento/opcoes")
+def api_agendamento_opcoes():
+    """Retorna dados agregados para o formulário de agendamento (categorias, serviços e profissionais)."""
+    logger.info("Acessando API /api/agendamento/opcoes")
+    if not supabase:
+        logger.error("Supabase não inicializado em /api/agendamento/opcoes")
+        return jsonify({
+            "categorias": [],
+            "servicos": [],
+            "profissionais": []
+        }), 503
+
+    try:
+        servicos_resp = supabase.table("servicos").select(
+            "id_servico, nome, categoria, duracao_minutos, preco, ativo"
+        ).eq("ativo", True).order("categoria").order("nome").execute()
+        servicos_data = servicos_resp.data or []
+
+        relacionamentos_resp = supabase.table("profissionais_servicos") \
+            .select("id_servico, id_profissional").execute()
+        relacionamentos = relacionamentos_resp.data or []
+
+        profissionais_resp = supabase.table("profissionais").select(
+            "id_profissional, nome, ativo"
+        ).eq("ativo", True).order("nome").execute()
+        profissionais_data = profissionais_resp.data or []
+
+        profissionais_map = {}
+        for prof in profissionais_data:
+            try:
+                pid = int(prof["id_profissional"])
+            except (TypeError, ValueError):
+                continue
+            if not prof.get("ativo", True):
+                continue
+            profissionais_map[pid] = {
+                "id_profissional": pid,
+                "nome": prof.get("nome", f"Profissional {pid}")
+            }
+
+        profissionais_por_servico: dict[int, set[int]] = defaultdict(set)
+        for rel in relacionamentos:
+            try:
+                sid = int(rel.get("id_servico"))
+                pid = int(rel.get("id_profissional"))
+            except (TypeError, ValueError):
+                continue
+            if pid in profissionais_map:
+                profissionais_por_servico[sid].add(pid)
+
+        categorias = set()
+        servicos_payload = []
+        for servico in servicos_data:
+            try:
+                sid = int(servico["id_servico"])
+            except (TypeError, ValueError):
+                logger.warning("ID de serviço inválido ignorado em /api/agendamento/opcoes: %s", servico)
+                continue
+
+            categoria = servico.get("categoria") or "Outros"
+            categorias.add(categoria)
+            profissionais_ids = profissionais_por_servico.get(sid, set())
+            profissionais_lista = [profissionais_map[pid] for pid in profissionais_ids if pid in profissionais_map]
+            profissionais_lista.sort(key=lambda p: p["nome"].lower())
+
+            servicos_payload.append({
+                "id_servico": sid,
+                "nome": servico.get("nome"),
+                "categoria": categoria,
+                "preco": float(servico.get("preco") or 0),
+                "duracao_minutos": servico.get("duracao_minutos"),
+                "profissionais": profissionais_lista
+            })
+
+        servicos_payload.sort(key=lambda s: (s["categoria"].lower(), s["nome"].lower()))
+
+        resposta = {
+            "categorias": sorted(categorias, key=lambda c: c.lower()),
+            "servicos": servicos_payload,
+            "profissionais": list(profissionais_map.values())
+        }
+
+        logger.debug("Dados agregados de agendamento gerados com %d serviços e %d profissionais",
+                     len(servicos_payload), len(profissionais_map))
+        return jsonify(resposta)
+
+    except Exception as exc:
+        logger.exception("Erro ao montar dados agregados de agendamento: %s", exc)
+        return jsonify({
+            "categorias": [],
+            "servicos": [],
+            "profissionais": [],
+            "error": "Erro ao obter dados de agendamento"
+        }), 500
 
 @app.route("/api/profissionais")
 def api_listar_profissionais():
@@ -349,13 +455,43 @@ def api_profissionais(id_servico):
     if supabase:
         try:
             logger.debug("Consultando profissionais para serviço %s", id_servico)
-            profs = supabase.from_("profissionais_servicos").select("profissionais!inner(id_profissional, nome)").eq("id_servico", id_servico).eq("profissionais.ativo", True).execute().data
-            result = [p['profissionais'] for p in profs]
-            logger.debug("Profissionais encontrados: %s", result)
-            return jsonify(result)
+            relacionamentos_resp = supabase.table("profissionais_servicos") \
+                .select("id_profissional") \
+                .eq("id_servico", id_servico) \
+                .execute()
+
+            relacionamentos = relacionamentos_resp.data or []
+            ids_profissionais = set()
+            for rel in relacionamentos:
+                try:
+                    if rel.get("id_profissional") is not None:
+                        ids_profissionais.add(int(rel["id_profissional"]))
+                except (TypeError, ValueError):
+                    logger.warning(
+                        "ID de profissional inválido no relacionamento do serviço %s: %s",
+                        id_servico,
+                        rel,
+                        exc_info=True
+                    )
+
+            if not ids_profissionais:
+                logger.debug("Nenhum profissional associado ao serviço %s", id_servico)
+                return jsonify([])
+
+            profissionais_resp = supabase.table("profissionais") \
+                .select("id_profissional, nome") \
+                .in_("id_profissional", sorted(ids_profissionais)) \
+                .eq("ativo", True) \
+                .order("nome") \
+                .execute()
+
+            profissionais = profissionais_resp.data or []
+            logger.debug("Profissionais encontrados para serviço %s: %s", id_servico, profissionais)
+            return jsonify(profissionais)
         except Exception as e:
-            logger.error("Erro ao consultar profissionais: %s", str(e))
-            return jsonify([]), 500
+            logger.exception("Erro ao consultar profissionais para o serviço %s: %s", id_servico, str(e))
+            # Retorna lista vazia para evitar falha no frontend, mantendo log detalhado do erro.
+            return jsonify([])
     logger.warning("Supabase não inicializado")
     return jsonify([])
 
@@ -430,13 +566,23 @@ def api_horarios_disponiveis(id_profissional, data):
 
         # Consultar agendamentos existentes
         logger.debug("Consultando agendamentos para profissional %s na data %s", id_profissional, data)
-        agends = supabase.table("agendamentos").select("hora_agendamento, duracao_total").eq("id_profissional", id_profissional).eq("data_agendamento", data).eq("status", "pendente").execute().data
+        # Considera agendamentos que bloqueiam horário: pendentes e agendados
+        agends = supabase.table("agendamentos") \
+            .select("hora_agendamento, duracao_total") \
+            .eq("id_profissional", id_profissional) \
+            .eq("data_agendamento", data) \
+            .in_("status", ["🟡Pendente", "🔵Agendado"]) \
+            .execute().data
         logger.debug("Agendamentos encontrados: %s", agends)
 
         occupied = []
         for ag in agends:
             try:
-                hora_start = datetime.strptime(ag['hora_agendamento'], '%H:%M')
+                # Tenta com segundos e depois sem segundos para compatibilidade
+                try:
+                    hora_start = datetime.strptime(ag['hora_agendamento'], '%H:%M:%S')
+                except ValueError:
+                    hora_start = datetime.strptime(ag['hora_agendamento'], '%H:%M')
                 duracao = ag.get('duracao_total', 0) or 60  # Fallback se duracao_total não estiver definido
                 hora_end = hora_start + timedelta(minutes=duracao)
                 occupied.append((hora_start, hora_end))
@@ -896,7 +1042,7 @@ def api_agendamento(id):
             logger.error(f"Erro PUT ao atualizar agendamento {id}: {str(e)}")
             return jsonify({"error": str(e)}), 500
 
-# Certifiquue-se de que o bloco acima está fechado antes da próxima rota
+# Certifique-se de que o bloco acima está fechado antes da próxima rota
 @app.route("/api/teste/<int:id_profissional>")
 def teste_api(id_profissional):
     return jsonify({

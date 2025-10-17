@@ -501,279 +501,599 @@ document.addEventListener('DOMContentLoaded', async () => {
         const horaSelect = document.getElementById('hora');
         const dataInput = document.getElementById('data_agendamento');
         const submitBtn = agendamentoForm.querySelector('.btn');
-        // Suporte ao markup legado (uma única categoria)
+        const observacoesGroup = document.getElementById('observacoes-group');
+        const observacoesTextarea = document.getElementById('obs');
         const legacyCategoriaSelect = document.getElementById('categoria-select');
         const legacyServicosContainer = document.getElementById('servicos-por-categoria-container');
+        const categoriaInicialSelect = document.getElementById('categoria-1');
 
-        let servicosData = {};
+        let profissionaisMsg = document.getElementById('profissionais-msg');
+        if (!profissionaisMsg && profissionalGroup && profissionalGroup.parentNode) {
+            profissionaisMsg = document.createElement('p');
+            profissionaisMsg.id = 'profissionais-msg';
+            profissionaisMsg.classList.add('profissionais-aviso');
+            profissionaisMsg.style.display = 'none';
+            profissionalGroup.parentNode.insertBefore(profissionaisMsg, profissionalGroup.nextSibling);
+        }
+
+        if (categoriaInicialSelect) {
+            categoriaInicialSelect.innerHTML = '<option value="">Carregando categorias...</option>';
+        }
+        if (legacyCategoriaSelect) {
+            legacyCategoriaSelect.innerHTML = '<option value="">Carregando categorias...</option>';
+        }
+        if (addCategoriaBtn) {
+            addCategoriaBtn.disabled = true;
+        }
+
         let calendar;
+        let calendarRendered = false;
         let categoriaCount = 1;
-        // Guarda os dias de trabalho do profissional selecionado (0=Dom .. 6=Sáb)
         let diasTrabalhoIndices = [];
+        const diaCellRefs = new Map();
+        const disponibilidadePorData = new Map();
+        const disponibilidadeCache = new Map();
+        let disponibilidadeContextKey = '';
 
-        // Calcula minDate localmente (D+1)
-        const minDate = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().split('T')[0]; })();
+        const servicoPorId = new Map();
+        const servicosPorCategoria = new Map();
+        const profissionaisPorId = new Map();
+        const profissionaisPorServico = new Map();
+        let categoriasDisponiveis = [];
+        let dadosCarregados = false;
 
-        calendar = new FullCalendar.Calendar(calendarEl, {
-            initialView: 'dayGridMonth',
-            selectable: true,
-            selectAllow: function(selectionInfo) {
-                const date = selectionInfo.start;
-                if (!date || diasTrabalhoIndices.length === 0) return false;
-                const dow = date.getDay(); // 0 (Domingo) .. 6 (Sábado)
-                return diasTrabalhoIndices.includes(dow);
-            },
-            select: function(info) {
-                const dateStr = info.startStr;
-                const dow = info.start.getDay();
-                if (!diasTrabalhoIndices.includes(dow)) return; // segurança
-                dataInput.value = dateStr;
-                carregarHorarios(dateStr);
-                document.querySelectorAll('.fc-day-selected').forEach(el => el.classList.remove('fc-day-selected'));
-                const cell = document.querySelector(`.fc-day[data-date="${dateStr}"]`);
-                if (cell) cell.classList.add('fc-day-selected');
-            },
-            businessHours: { daysOfWeek: [], startTime: '08:00', endTime: '18:00' },
-            validRange: { start: minDate },
-            dayCellClassNames: function(arg) {
-                const classes = [];
-                if (arg.isPast) classes.push('fc-day-past');
-                if (diasTrabalhoIndices.length > 0) {
-                    const dow = arg.date.getDay();
-                    classes.push(diasTrabalhoIndices.includes(dow) ? 'fc-day-available' : 'fc-day-unavailable');
-                }
-                return classes;
+        const formatarPreco = (valor) => {
+            if (valor === null || valor === undefined || valor === '') {
+                return 'Valor indisponível';
             }
-        });
-        calendar.render();
+            const numero = Number(valor);
+            if (Number.isFinite(numero)) {
+                return `R$ ${numero.toFixed(2).replace('.', ',')}`;
+            }
+            return `R$ ${valor}`;
+        };
+
+        function criarLabelServico(servico) {
+            const label = document.createElement('label');
+            label.classList.add('servico-item');
+
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.value = servico.id_servico;
+            checkbox.name = 'id_servicos[]';
+            checkbox.classList.add('servico-checkbox');
+            label.appendChild(checkbox);
+
+            const descricaoSpan = document.createElement('span');
+            descricaoSpan.textContent = servico.nome;
+            descricaoSpan.classList.add('servico-nome');
+            label.appendChild(descricaoSpan);
+
+            const precoSpan = document.createElement('span');
+            precoSpan.classList.add('servico-preco');
+            precoSpan.textContent = `- ${formatarPreco(servico.preco)}`;
+            label.appendChild(precoSpan);
+
+            return label;
+        }
+
+        function limparObservacoes() {
+            if (observacoesGroup) {
+                observacoesGroup.style.display = 'none';
+            }
+            if (observacoesTextarea) {
+                observacoesTextarea.value = '';
+                observacoesTextarea.placeholder = '';
+            }
+        }
+
+        if (observacoesGroup) {
+            observacoesGroup.style.display = 'none';
+        }
+        if (observacoesTextarea) {
+            observacoesTextarea.value = '';
+        }
+
+        const minDate = (() => {
+            const d = new Date();
+            d.setDate(d.getDate() + 1);
+            return d.toISOString().split('T')[0];
+        })();
+
+        const formatIsoDate = dateObj => {
+            const tzDate = new Date(dateObj.getTime() - (dateObj.getTimezoneOffset() * 60000));
+            return tzDate.toISOString().split('T')[0];
+        };
+        const parseIsoDate = iso => {
+            const [year, month, day] = iso.split('-').map(Number);
+            return new Date(year, month - 1, day);
+        };
+
+        const normalizarServicos = ids => ids.slice().sort((a, b) => a - b);
+
+        function podeSelecionarData(dateStr, dateObj) {
+            if (!dateStr || !dateObj) return false;
+            if (!profissionalSelect.value) return false;
+            if (dateStr < minDate) return false;
+            if (diasTrabalhoIndices.length === 0) return false;
+            if (!diasTrabalhoIndices.includes(dateObj.getDay())) return false;
+            const status = disponibilidadePorData.get(dateStr);
+            return status === true;
+        }
+
+        function aplicarClassesDia(dateStr, dateObj, cell) {
+            if (!cell) return;
+            cell.classList.remove('fc-day-available', 'fc-day-unavailable', 'fc-day-loading', 'fc-day-blocked');
+            if (dateStr < minDate) {
+                disponibilidadePorData.set(dateStr, false);
+                cell.classList.add('fc-day-blocked');
+                return;
+            }
+            const dow = dateObj.getDay();
+            if (diasTrabalhoIndices.length > 0 && !diasTrabalhoIndices.includes(dow)) {
+                cell.classList.add('fc-day-unavailable');
+                return;
+            }
+            const status = disponibilidadePorData.get(dateStr);
+            if (status === true) {
+                cell.classList.add('fc-day-available');
+            } else if (status === false) {
+                cell.classList.add('fc-day-unavailable');
+            } else if (status === null) {
+                cell.classList.add('fc-day-loading');
+            }
+        }
+
+        function reaplicarClassesDias() {
+            diaCellRefs.forEach((meta, dateStr) => {
+                aplicarClassesDia(dateStr, meta.date, meta.el);
+            });
+        }
+
+        function limparDisponibilidade() {
+            disponibilidadePorData.clear();
+            disponibilidadeContextKey = '';
+            reaplicarClassesDias();
+        }
+
+        function atualizarDisponibilidadeCalendario() {
+            if (!calendarRendered) {
+                return;
+            }
+            const profId = profissionalSelect.value;
+            const serviceIds = getSelectedServiceIds();
+            const idsOrdenados = normalizarServicos(serviceIds);
+            if (!profId || idsOrdenados.length === 0) {
+                limparDisponibilidade();
+                return;
+            }
+
+            const contexto = `${profId}|${idsOrdenados.join('-')}`;
+            disponibilidadeContextKey = contexto;
+            disponibilidadePorData.clear();
+
+            const view = calendar.view;
+            if (!view) {
+                reaplicarClassesDias();
+                return;
+            }
+
+            const start = new Date(view.currentStart);
+            const end = new Date(view.currentEnd);
+            const datasParaBuscar = [];
+
+            for (let dt = new Date(start); dt < end; dt.setDate(dt.getDate() + 1)) {
+                const iso = formatIsoDate(dt);
+                if (iso < minDate) {
+                    disponibilidadePorData.set(iso, false);
+                    continue;
+                }
+                const dow = dt.getDay();
+                if (diasTrabalhoIndices.length > 0 && !diasTrabalhoIndices.includes(dow)) {
+                    disponibilidadePorData.set(iso, false);
+                    continue;
+                }
+                const cacheKey = `${contexto}|${iso}`;
+                if (disponibilidadeCache.has(cacheKey)) {
+                    disponibilidadePorData.set(iso, disponibilidadeCache.get(cacheKey));
+                } else {
+                    disponibilidadePorData.set(iso, null);
+                    datasParaBuscar.push({ iso, cacheKey });
+                }
+            }
+
+            reaplicarClassesDias();
+            if (datasParaBuscar.length === 0) {
+                return;
+            }
+
+            const payload = JSON.stringify({ id_servicos: idsOrdenados });
+            const headers = { 'Content-Type': 'application/json' };
+
+            datasParaBuscar.reduce((promise, item) => {
+                return promise.then(() => {
+                    if (disponibilidadeContextKey !== contexto) {
+                        return;
+                    }
+                    return fetch(`/api/horarios_disponiveis/${profId}/${item.iso}`, {
+                        method: 'POST',
+                        headers,
+                        body: payload
+                    })
+                    .then(res => res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`)))
+                    .then(data => {
+                        const disponivel = Array.isArray(data) && data.length > 0 && !data.error;
+                        disponibilidadeCache.set(item.cacheKey, disponivel);
+                        if (disponibilidadeContextKey === contexto) {
+                            disponibilidadePorData.set(item.iso, disponivel);
+                            reaplicarClassesDias();
+                        }
+                    })
+                    .catch(() => {
+                        disponibilidadeCache.set(item.cacheKey, false);
+                        if (disponibilidadeContextKey === contexto) {
+                            disponibilidadePorData.set(item.iso, false);
+                            reaplicarClassesDias();
+                        }
+                    });
+                });
+            }, Promise.resolve());
+        }
+
+        function criarCalendarioSeNecessario() {
+            if (calendar) return;
+            calendar = new FullCalendar.Calendar(calendarEl, {
+                initialView: 'dayGridMonth',
+                initialDate: minDate,
+                height: 'auto',
+                selectable: true,
+                headerToolbar: {
+                    left: 'prev,next today',
+                    center: 'title',
+                    right: ''
+                },
+                selectAllow(selectionInfo) {
+                    return podeSelecionarData(selectionInfo.startStr, selectionInfo.start);
+                },
+                select(info) {
+                    const dateStr = info.startStr;
+                    if (!podeSelecionarData(dateStr, info.start)) {
+                        if (horariosMsg) {
+                            horariosMsg.style.display = 'block';
+                            horariosMsg.textContent = 'Nenhum horário compatível com os serviços selecionados para esta data.';
+                        }
+                        calendar.unselect();
+                        return;
+                    }
+                    dataInput.value = dateStr;
+                    carregarHorarios(dateStr);
+                    document.querySelectorAll('.fc-day-selected').forEach(el => el.classList.remove('fc-day-selected'));
+                    const cell = document.querySelector(`.fc-day[data-date="${dateStr}"]`);
+                    if (cell) cell.classList.add('fc-day-selected');
+                },
+                datesSet() {
+                    atualizarDisponibilidadeCalendario();
+                },
+                dayCellDidMount(arg) {
+                    const dateStr = formatIsoDate(arg.date);
+                    diaCellRefs.set(dateStr, { el: arg.el, date: new Date(arg.date.valueOf()) });
+                    aplicarClassesDia(dateStr, arg.date, arg.el);
+                },
+                dayCellWillUnmount(arg) {
+                    const dateStr = formatIsoDate(arg.date);
+                    diaCellRefs.delete(dateStr);
+                }
+            });
+        }
+
+        criarCalendarioSeNecessario();
 
         function getSelectedServiceIds() {
             const checked = categoriasContainer
-                ? categoriasContainer.querySelectorAll('input:checked')
-                : (legacyServicosContainer ? legacyServicosContainer.querySelectorAll('input:checked') : []);
-            return Array.from(checked).map(input => parseInt(input.value));
+                ? categoriasContainer.querySelectorAll('input[type="checkbox"]:checked')
+                : (legacyServicosContainer ? legacyServicosContainer.querySelectorAll('input[type="checkbox"]:checked') : []);
+            return Array.from(checked).map(input => parseInt(input.value, 10)).filter(Number.isFinite);
         }
 
-        function carregarCategorias(selectId) {
-            const categoriaSelect = document.getElementById(selectId);
-            if (!categoriaSelect) {
-                console.warn('Select de categoria não encontrado:', selectId);
+        function existeCategoriaDuplicada() {
+            if (!categoriasContainer) return false;
+            const values = Array.from(categoriasContainer.querySelectorAll('select.categoria'))
+                .map(sel => sel.value)
+                .filter(Boolean);
+            return new Set(values).size !== values.length;
+        }
+
+        function renderServicosParaCategoria(categoria, container) {
+            if (!container) return;
+            container.innerHTML = '';
+            if (!categoria) return;
+            const lista = servicosPorCategoria.get(categoria) || [];
+            lista.forEach(servico => {
+                container.appendChild(criarLabelServico(servico));
+            });
+        }
+
+        function preencherOpcoesCategoria(select) {
+            if (!select) return;
+            select.innerHTML = '<option value="">-- Escolha uma Categoria --</option>';
+            categoriasDisponiveis.forEach(cat => {
+                const option = document.createElement('option');
+                option.value = cat;
+                option.textContent = cat;
+                select.appendChild(option);
+            });
+            select.disabled = categoriasDisponiveis.length === 0;
+        }
+
+        function setupCategoriaSelect(select, container) {
+            if (!select || !container) return;
+            preencherOpcoesCategoria(select);
+            if (select.dataset.agendamentoBound === 'true') return;
+            select.dataset.agendamentoBound = 'true';
+            select.addEventListener('change', () => {
+                const categoria = select.value;
+                if (!categoria) {
+                    container.innerHTML = '';
+                    onServicesChange();
+                    return;
+                }
+                if (existeCategoriaDuplicada()) {
+                    alert('Você já selecionou esta categoria. Escolha outra.');
+                    select.value = '';
+                    container.innerHTML = '';
+                    onServicesChange();
+                    return;
+                }
+                renderServicosParaCategoria(categoria, container);
+                onServicesChange();
+            });
+        }
+
+        function atualizarTotal(selectedIds) {
+            if (!selectedIds || selectedIds.length === 0) {
+                totalInfo.textContent = 'Total: Preço R$ 0,00';
                 return;
             }
-            fetch('/api/categorias')
-                .then(res => res.json())
-                .then(data => data.forEach(cat => {
-                    const option = document.createElement('option');
-                    option.value = cat;
-                    option.textContent = cat;
-                    categoriaSelect.appendChild(option);
-                }))
-                .catch(err => console.error('Erro ao carregar categorias:', err));
-
-            categoriaSelect.addEventListener('change', () => {
-                const categoria = categoriaSelect.value;
-                // Impedir seleção de categoria duplicada
-                if (categoria) {
-                    const allSelects = Array.from(document.querySelectorAll('#categorias-container .categoria'));
-                    const values = allSelects.map(s => s.value).filter(Boolean);
-                    const duplicates = values.filter((v, i) => values.indexOf(v) !== i);
-                    if (duplicates.length > 0) {
-                        alert('Você já selecionou esta categoria. Escolha outra.');
-                        categoriaSelect.value = '';
-                        const checksId = `servicos-checkboxes-${selectId.split('-')[1]}`;
-                        const box = document.getElementById(checksId);
-                        if (box) box.innerHTML = '';
-                        return;
-                    }
-                }
-                const checkboxesId = `servicos-checkboxes-${selectId.split('-')[1]}`;
-                const servicosCheckboxes = document.getElementById(checkboxesId);
-                if (!servicosCheckboxes) return;
-                servicosCheckboxes.innerHTML = '';
-                if (categoria) {
-                    fetch(`/api/servicos?categoria=${encodeURIComponent(categoria)}`)
-                        .then(res => res.json())
-                        .then(data => {
-                            servicosData[categoria] = data;
-                            data.forEach(servico => {
-                                const label = document.createElement('label');
-                                const checkbox = document.createElement('input');
-                                checkbox.type = 'checkbox';
-                                checkbox.value = servico.id_servico;
-                                checkbox.name = 'id_servicos[]';
-                                label.appendChild(checkbox);
-                                const dur = servico.duracao_minutos != null ? `${servico.duracao_minutos} min` : '—';
-                                const preco = servico.preco != null ? `R$ ${servico.preco}` : '—';
-                                label.appendChild(document.createTextNode(` ${servico.nome} (${dur}, ${preco})`));
-                                servicosCheckboxes.appendChild(label);
-                            });
-                        })
-                        .catch(err => console.error('Erro ao carregar serviços:', err));
+            let total = 0;
+            selectedIds.forEach(id => {
+                const servico = servicoPorId.get(id);
+                if (!servico) return;
+                const preco = Number(servico.preco);
+                if (!Number.isNaN(preco)) {
+                    total += preco;
                 }
             });
+            totalInfo.textContent = `Total: Preço R$ ${total.toFixed(2).replace('.', ',')}`;
         }
 
-        // Fluxo legado: única categoria com IDs antigos
-        function initLegacyCategoriaFlow() {
-            if (!legacyCategoriaSelect || !legacyServicosContainer) return;
-            legacyCategoriaSelect.innerHTML = '<option value="">Carregando categorias...</option>';
-            fetch('/api/categorias')
-                .then(res => res.json())
-                .then(lista => {
-                    legacyCategoriaSelect.innerHTML = '<option value="">-- Escolha uma Categoria --</option>';
-                    lista.forEach(cat => {
-                        const opt = document.createElement('option');
-                        opt.value = cat;
-                        opt.textContent = cat;
-                        legacyCategoriaSelect.appendChild(opt);
+        function calcularProfissionaisComuns(ids) {
+            if (!ids || ids.length === 0) return [];
+            const contagem = new Map();
+            for (const id of ids) {
+                const conjunto = profissionaisPorServico.get(id);
+                if (!conjunto || conjunto.size === 0) {
+                    return [];
+                }
+                conjunto.forEach(pid => {
+                    contagem.set(pid, (contagem.get(pid) || 0) + 1);
+                });
+            }
+            const resultado = [];
+            contagem.forEach((count, pid) => {
+                if (count === ids.length) {
+                    resultado.push({
+                        id_profissional: pid,
+                        nome: profissionaisPorId.get(pid) || `Profissional ${pid}`
                     });
-                })
-                .catch(err => console.error('Erro ao carregar categorias (legado):', err));
-
-            legacyCategoriaSelect.addEventListener('change', () => {
-                const categoria = legacyCategoriaSelect.value;
-                legacyServicosContainer.innerHTML = '';
-                if (!categoria) return;
-                fetch(`/api/servicos?categoria=${encodeURIComponent(categoria)}`)
-                    .then(res => res.json())
-                    .then(data => {
-                        servicosData[categoria] = data;
-                        data.forEach(servico => {
-                            const label = document.createElement('label');
-                            const checkbox = document.createElement('input');
-                            checkbox.type = 'checkbox';
-                            checkbox.value = servico.id_servico;
-                            checkbox.name = 'id_servicos[]';
-                            label.appendChild(checkbox);
-                            const dur = servico.duracao_minutos != null ? `${servico.duracao_minutos} min` : '—';
-                            const preco = servico.preco != null ? `R$ ${servico.preco}` : '—';
-                            label.appendChild(document.createTextNode(` ${servico.nome} (${dur}, ${preco})`));
-                            legacyServicosContainer.appendChild(label);
-                        });
-                    })
-                    .catch(err => console.error('Erro ao carregar serviços (legado):', err));
+                }
             });
+            resultado.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+            return resultado;
         }
 
-        // Inicia o fluxo adequado conforme o HTML presente
-        if (document.getElementById('categoria-1')) {
-            carregarCategorias('categoria-1');
-        } else if (legacyCategoriaSelect) {
-            initLegacyCategoriaFlow();
-        }
+        function atualizarProfissionaisDisponiveis(selectedIds) {
+            profissionalSelect.innerHTML = '<option value="">-- Escolha um Profissional --</option>';
+            calendarioGroup.style.display = 'none';
+            horaSelect.innerHTML = '<option value="">-- Escolha um Horário --</option>';
+            horariosMsg.style.display = 'none';
+            submitBtn.disabled = true;
+            limparObservacoes();
+            if (profissionaisMsg) {
+                profissionaisMsg.textContent = '';
+                profissionaisMsg.style.display = 'none';
+            }
+            diasTrabalhoIndices = [];
+            limparDisponibilidade();
+            if (calendar) {
+                calendar.unselect();
+            }
 
-        if (addCategoriaBtn) {
-            addCategoriaBtn.addEventListener('click', () => {
-            categoriaCount++;
-            const newGroup = document.createElement('div');
-            newGroup.classList.add('form-group', 'categoria-group');
-            newGroup.innerHTML = `
-                <label for="categoria-${categoriaCount}">Outra Categoria:</label>
-                <select id="categoria-${categoriaCount}" class="categoria" required>
-                    <option value="">-- Escolha uma Categoria --</option>
-                </select>
-                <div id="servicos-checkboxes-${categoriaCount}" class="servicos-checkboxes"></div>
-            `;
-            categoriasContainer.appendChild(newGroup);
-            carregarCategorias(`categoria-${categoriaCount}`);
+            if (!selectedIds || selectedIds.length === 0) {
+                profissionalGroup.style.display = 'none';
+                return;
+            }
+
+            const disponiveis = calcularProfissionaisComuns(selectedIds);
+            if (disponiveis.length === 0) {
+                profissionalGroup.style.display = 'none';
+                if (profissionaisMsg) {
+                    profissionaisMsg.textContent = 'Nenhum profissional atende todos os serviços selecionados.';
+                    profissionaisMsg.style.display = 'block';
+                }
+                return;
+            }
+
+            disponiveis.forEach(prof => {
+                const option = document.createElement('option');
+                option.value = prof.id_profissional;
+                option.textContent = prof.nome;
+                profissionalSelect.appendChild(option);
             });
+            profissionalGroup.style.display = 'block';
         }
 
         const onServicesChange = () => {
             const selectedIds = getSelectedServiceIds();
-            if (selectedIds.length > 0) {
-                fetch('/api/calcular_total', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id_servicos: selectedIds })
-                })
-                .then(res => res.json())
-                .then(data => {
-                    totalInfo.textContent = `Total: Preço R$ ${data.preco_total}`;
-                    carregarProfissionaisParaAgendamento(selectedIds);
-                })
-                .catch(err => console.error('Erro ao calcular total:', err));
-            } else {
-                totalInfo.textContent = 'Total: Preço R$ 0,00';
-                profissionalGroup.style.display = 'none';
-            }
+            atualizarTotal(selectedIds);
+            atualizarProfissionaisDisponiveis(selectedIds);
         };
+
         if (categoriasContainer) categoriasContainer.addEventListener('change', onServicesChange);
         if (legacyServicosContainer) legacyServicosContainer.addEventListener('change', onServicesChange);
 
-        function carregarProfissionaisParaAgendamento(idServicosSelecionados) {
-            profissionalSelect.innerHTML = '<option value="">-- Escolha um Profissional --</option>';
-            calendarioGroup.style.display = 'none';
-            submitBtn.disabled = true;
-            horaSelect.innerHTML = '<option value="">-- Escolha um Horário --</option>';
-            horariosMsg.style.display = 'none';
+        async function carregarDadosConfiguracao() {
+            servicoPorId.clear();
+            servicosPorCategoria.clear();
+            profissionaisPorId.clear();
+            profissionaisPorServico.clear();
+            categoriasDisponiveis = [];
+            dadosCarregados = false;
 
-            if (!idServicosSelecionados || idServicosSelecionados.length === 0) {
-                profissionalGroup.style.display = 'none';
-                return;
-            }
+            try {
+                const resp = await fetch('/api/agendamento/opcoes');
+                if (!resp.ok) {
+                    throw new Error(`HTTP ${resp.status}`);
+                }
+                const payload = await resp.json();
+                const servicos = payload.servicos || [];
 
-            // Busca profissionais para cada serviço e faz interseção
-            const promises = idServicosSelecionados.map(id => fetch(`/api/profissionais/${id}`).then(r => r.json()));
-            Promise.all(promises)
-                .then(listas => {
-                    // Converte para conjuntos de id_profissional
-                    const sets = listas.map(lst => new Set(lst.map(p => p.id_profissional)));
-                    // Interseção
-                    const intersecao = sets.reduce((acc, s) => new Set([...acc].filter(x => s.has(x))));
-                    // Mapa de id -> nome (pega da primeira lista que tiver)
-                    const nomes = new Map();
-                    listas.flat().forEach(p => { if (intersecao.has(p.id_profissional)) nomes.set(p.id_profissional, p.nome); });
+                servicos.forEach(servico => {
+                    const id = Number(servico.id_servico);
+                    if (!Number.isFinite(id)) return;
+                    const categoria = servico.categoria || 'Outros';
 
-                    if (intersecao.size === 0) {
-                        profissionalGroup.style.display = 'none';
-                        alert('Nenhum profissional atende todos os serviços selecionados.');
-                        return;
-                    }
-
-                    intersecao.forEach(id => {
-                        const option = document.createElement('option');
-                        option.value = id;
-                        option.textContent = nomes.get(id) || `Profissional ${id}`;
-                        profissionalSelect.appendChild(option);
+                    servicoPorId.set(id, {
+                        id_servico: id,
+                        nome: servico.nome,
+                        categoria: categoria,
+                        preco: servico.preco,
+                        duracao_minutos: servico.duracao_minutos
                     });
-                    profissionalGroup.style.display = 'block';
-                })
-                .catch(err => console.error('Erro ao carregar profissionais:', err));
+
+                    if (!servicosPorCategoria.has(categoria)) {
+                        servicosPorCategoria.set(categoria, []);
+                    }
+                    servicosPorCategoria.get(categoria).push(servicoPorId.get(id));
+
+                    const profissionais = servico.profissionais || [];
+                    const conjunto = new Set();
+                    profissionais.forEach(prof => {
+                        if (!prof) return;
+                        const pid = Number(prof.id_profissional);
+                        if (!Number.isFinite(pid)) return;
+                        conjunto.add(pid);
+                        if (!profissionaisPorId.has(pid)) {
+                            profissionaisPorId.set(pid, prof.nome || `Profissional ${pid}`);
+                        }
+                    });
+                    profissionaisPorServico.set(id, conjunto);
+                });
+
+                servicosPorCategoria.forEach(lista => {
+                    lista.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+                });
+                categoriasDisponiveis = Array.from(servicosPorCategoria.keys()).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
+                dadosCarregados = categoriasDisponiveis.length > 0;
+            } catch (error) {
+                console.error('Erro ao carregar dados de agendamento:', error);
+                dadosCarregados = false;
+            }
+        }
+
+        if (addCategoriaBtn && !addCategoriaBtn.dataset.agendamentoBound) {
+            addCategoriaBtn.dataset.agendamentoBound = 'true';
+            addCategoriaBtn.addEventListener('click', () => {
+                if (!dadosCarregados) {
+                    return;
+                }
+                categoriaCount++;
+                const newGroup = document.createElement('div');
+                newGroup.classList.add('form-group', 'categoria-group');
+                newGroup.innerHTML = `
+                    <label for="categoria-${categoriaCount}">Outra Categoria:</label>
+                    <select id="categoria-${categoriaCount}" class="categoria" required>
+                        <option value="">-- Escolha uma Categoria --</option>
+                    </select>
+                    <div id="servicos-checkboxes-${categoriaCount}" class="servicos-checkboxes"></div>
+                `;
+                categoriasContainer.appendChild(newGroup);
+                const novoSelect = newGroup.querySelector('select.categoria');
+                const novoContainer = newGroup.querySelector('.servicos-checkboxes');
+                setupCategoriaSelect(novoSelect, novoContainer);
+            });
         }
 
         profissionalSelect.addEventListener('change', () => {
             const idProfissional = profissionalSelect.value;
+            limparObservacoes();
+            if (profissionaisMsg) {
+                profissionaisMsg.style.display = 'none';
+            }
+            if (calendar) {
+                calendar.unselect();
+            }
+            limparDisponibilidade();
             if (idProfissional) {
+                criarCalendarioSeNecessario();
                 fetch(`/api/profissional/${idProfissional}`)
                     .then(res => res.json())
                     .then(data => {
                         const daysMap = { 'segunda': 1, 'terca': 2, 'quarta': 3, 'quinta': 4, 'sexta': 5, 'sabado': 6, 'domingo': 0 };
-                        // Atualiza businessHours no calendário e guarda dias para colorização
-                        diasTrabalhoIndices = data.dias_trabalho.map(d => daysMap[d.toLowerCase()]);
+                        const dias = (data.dias_trabalho || []).map(d => daysMap[d.toLowerCase()]);
+                        diasTrabalhoIndices = dias;
                         calendar.setOption('businessHours', {
-                            daysOfWeek: data.dias_trabalho.map(d => daysMap[d.toLowerCase()]),
+                            daysOfWeek: dias,
                             startTime: data.horario_inicio,
                             endTime: data.horario_fim
                         });
-                        // Re-render para aplicar classes de disponível/indisponível
-                        // FullCalendar v5 não possui rerenderDates; chamar render() é suficiente
-                        calendar.render();
-                        // Reset de horários ao trocar de profissional
+                        reaplicarClassesDias();
                         horaSelect.innerHTML = '<option value="">-- Escolha um Horário --</option>';
                         horariosMsg.style.display = 'none';
                         calendarioGroup.style.display = 'block';
+                        if (!calendarRendered) {
+                            calendarRendered = true;
+                            calendar.render();
+                            calendar.gotoDate(minDate);
+                        } else {
+                            calendar.updateSize();
+                            calendar.gotoDate(minDate);
+                        }
+                        atualizarDisponibilidadeCalendario();
                     })
-                    .catch(err => console.error('Erro ao carregar dias de trabalho:', err));
+                    .catch(err => {
+                        console.error('Erro ao carregar dias de trabalho:', err);
+                        diasTrabalhoIndices = [];
+                        limparDisponibilidade();
+                        calendarioGroup.style.display = 'none';
+                        horariosMsg.style.display = 'block';
+                        horariosMsg.textContent = 'Erro ao carregar disponibilidade do profissional. Tente novamente.';
+                    });
             } else {
                 calendarioGroup.style.display = 'none';
                 submitBtn.disabled = true;
+                horaSelect.innerHTML = '<option value="">-- Escolha um Horário --</option>';
+                horariosMsg.style.display = 'none';
+                diasTrabalhoIndices = [];
+                limparDisponibilidade();
             }
         });
 
         function carregarHorarios(data) {
             const idProfissional = profissionalSelect.value;
             const selectedIds = getSelectedServiceIds();
+            if (!idProfissional || selectedIds.length === 0) {
+                return;
+            }
+            const dataObj = parseIsoDate(data);
+            if (!podeSelecionarData(data, dataObj)) {
+                horaSelect.innerHTML = '<option value="">-- Escolha um Horário --</option>';
+                submitBtn.disabled = true;
+                horariosMsg.style.display = 'block';
+                horariosMsg.textContent = 'Nenhum horário compatível com os serviços selecionados para esta data.';
+                return;
+            }
+            limparObservacoes();
             fetch(`/api/horarios_disponiveis/${idProfissional}/${data}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -782,13 +1102,17 @@ document.addEventListener('DOMContentLoaded', async () => {
             .then(res => res.json())
             .then(data => {
                 horaSelect.innerHTML = '<option value="">-- Escolha um Horário --</option>';
+                submitBtn.disabled = true;
+                if (observacoesGroup) {
+                    observacoesGroup.style.display = 'none';
+                }
                 if (data.error) {
                     horariosMsg.style.display = 'block';
                     horariosMsg.textContent = data.error;
-                } else if (data.length === 0) {
+                } else if (Array.isArray(data) && data.length === 0) {
                     horariosMsg.style.display = 'block';
-                    horariosMsg.textContent = 'Nenhum horário disponível para esta data.';
-                } else {
+                    horariosMsg.textContent = 'Nenhum horário disponível para os serviços selecionados nesta data.';
+                } else if (Array.isArray(data)) {
                     horariosMsg.style.display = 'none';
                     data.forEach(hora => {
                         const option = document.createElement('option');
@@ -799,14 +1123,26 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
             })
             .catch(err => {
-                console.error("Erro ao carregar horários:", err);
+                console.error('Erro ao carregar horários:', err);
                 horariosMsg.style.display = 'block';
-                horariosMsg.textContent = "Erro ao carregar horários. Tente novamente.";
+                horariosMsg.textContent = 'Erro ao carregar horários. Tente novamente.';
             });
         }
 
         horaSelect.addEventListener('change', () => {
-            submitBtn.disabled = !horaSelect.value;
+            const selecionouHorario = Boolean(horaSelect.value);
+            submitBtn.disabled = !selecionouHorario;
+            if (observacoesGroup) {
+                observacoesGroup.style.display = selecionouHorario ? 'block' : 'none';
+            }
+            if (observacoesTextarea) {
+                if (selecionouHorario) {
+                    observacoesTextarea.placeholder = 'Observações (opcional)';
+                } else {
+                    observacoesTextarea.value = '';
+                    observacoesTextarea.placeholder = '';
+                }
+            }
         });
 
         agendamentoForm.addEventListener('submit', function(event) {
@@ -833,4 +1169,24 @@ document.addEventListener('DOMContentLoaded', async () => {
                 resetButton(this);
             });
         });
+
+        (async function initAgendamento() {
+            await carregarDadosConfiguracao();
+            if (dadosCarregados) {
+                if (categoriaInicialSelect) {
+                    setupCategoriaSelect(categoriaInicialSelect, document.getElementById('servicos-checkboxes-1'));
+                }
+                if (legacyCategoriaSelect && legacyServicosContainer) {
+                    setupCategoriaSelect(legacyCategoriaSelect, legacyServicosContainer);
+                }
+                if (addCategoriaBtn) {
+                    addCategoriaBtn.disabled = false;
+                }
+            } else {
+                totalInfo.textContent = 'Serviços indisponíveis no momento.';
+                if (addCategoriaBtn) {
+                    addCategoriaBtn.disabled = true;
+                }
+            }
+        })();
     }  // Fim correto do if (agendamentoForm) com indentação alinhadaa

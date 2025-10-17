@@ -375,7 +375,8 @@ select[multiple] {
 
 #calendar {
     max-width: 100%;
-    height: 400px;
+    min-height: 350px;
+    height: auto;
     margin: 0 auto;
 }
 
@@ -393,7 +394,18 @@ select[multiple] {
 
 .fc-day-past,
 .fc-day-disabled {
-    opacity: 0.3;
+    background-color: #ffe5e5 !important;
+    color: #8a1c1c !important;
+    opacity: 1;
+}
+
+.fc-day-blocked {
+    background-color: #ffcdd2 !important;
+    color: #8a1c1c !important;
+}
+
+.fc-day-loading {
+    background-color: #fff7e6 !important;
 }
 
 /* Aparência base dos dias futuros */
@@ -414,6 +426,11 @@ select[multiple] {
 .fc-day-unavailable {
     background-color: #ffe8e8 !important;
     color: #8a1c1c !important;
+    cursor: not-allowed;
+}
+
+.fc-day-blocked {
+    cursor: not-allowed;
 }
 
 /* Embeleza um pouco o calendário */
@@ -436,9 +453,35 @@ select[multiple] {
     padding: 10px;
 }
 
-#servicos-checkboxes label {
-    display: block;
-    margin-bottom: 5px;
+.servico-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    transition: background-color 0.2s ease;
+}
+
+.servico-item:hover {
+    background-color: rgba(255, 255, 255, 0.12);
+}
+
+.servico-item .servico-checkbox {
+    flex: 0 0 auto;
+    margin-right: 6px;
+    width: auto;
+    display: inline-block;
+}
+
+.servico-item .servico-nome {
+    flex: 1 1 auto;
+}
+
+.servico-item .servico-preco {
+    flex: 0 0 auto;
+    font-weight: 600;
+    margin-left: auto;
+    white-space: nowrap;
 }
 
 /* Empilhar serviços verticalmente também no fluxo legado */
@@ -446,9 +489,6 @@ select[multiple] {
     display: flex;
     flex-direction: column;
     gap: 6px;
-}
-#servicos-por-categoria-container label {
-    display: block;
 }
 
 /* =========================
@@ -481,7 +521,6 @@ select[multiple] {
 }
 
 .servicos-checkboxes label {
-    display: block;
     margin-bottom: 5px;
 }
 
@@ -668,7 +707,8 @@ tr:hover {
 }
 
 .form-group input,
-.form-group select {
+.form-group select,
+.form-group textarea {
     width: 100%;
     padding: 8px;
 }

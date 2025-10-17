@@ -355,7 +355,7 @@ body {
 }
 
 /* =========================
-   MENSAGENS DE SUCESSO NOS FORMS
+   MENSAGENnS DE SUCESSO NOS FORMS
 ========================= */
 .form-container .success {
     background: rgba(0, 255, 0, 0.2);
@@ -375,7 +375,8 @@ select[multiple] {
 
 #calendar {
     max-width: 100%;
-    height: 400px;
+    min-height: 350px;
+    height: auto;
     margin: 0 auto;
 }
 
@@ -393,15 +394,52 @@ select[multiple] {
 
 .fc-day-past,
 .fc-day-disabled {
-    opacity: 0.3;
+    background-color: #ffe5e5 !important;
+    color: #8a1c1c !important;
+    opacity: 1;
 }
 
+.fc-day-blocked {
+    background-color: #ffcdd2 !important;
+    color: #8a1c1c !important;
+}
+
+.fc-day-loading {
+    background-color: #fff7e6 !important;
+}
+
+/* Aparência base dos dias futuros */
 .fc-day-future:not(.fc-day-disabled) {
     background-color: #ffffff;
 }
 
+/* Dia selecionado */
 .fc-day-selected {
-    background-color: #90ee90 !important;
+    background-color: #c8f7c5 !important;
+    box-shadow: inset 0 0 0 2px #2e7d32;
+}
+
+/* Dias de trabalho (disponíveis) e não trabalhados (indisponíveis) */
+.fc-day-available {
+    background-color: #f2fff2 !important;
+}
+.fc-day-unavailable {
+    background-color: #ffe8e8 !important;
+    color: #8a1c1c !important;
+    cursor: not-allowed;
+}
+
+.fc-day-blocked {
+    cursor: not-allowed;
+}
+
+/* Embeleza um pouco o calendário */
+#calendar .fc-daygrid-day,
+#calendar .fc-scrollgrid-sync-table {
+    border-radius: 6px;
+}
+#calendar .fc-toolbar-title {
+    color: #333;
 }
 
 /* =========================
@@ -415,9 +453,42 @@ select[multiple] {
     padding: 10px;
 }
 
-#servicos-checkboxes label {
-    display: block;
-    margin-bottom: 5px;
+.servico-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    transition: background-color 0.2s ease;
+}
+
+.servico-item:hover {
+    background-color: rgba(255, 255, 255, 0.12);
+}
+
+.servico-item .servico-checkbox {
+    flex: 0 0 auto;
+    margin-right: 6px;
+    width: auto;
+    display: inline-block;
+}
+
+.servico-item .servico-nome {
+    flex: 1 1 auto;
+}
+
+.servico-item .servico-preco {
+    flex: 0 0 auto;
+    font-weight: 600;
+    margin-left: auto;
+    white-space: nowrap;
+}
+
+/* Empilhar serviços verticalmente também no fluxo legado */
+#servicos-por-categoria-container {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
 }
 
 /* =========================
@@ -450,12 +521,27 @@ select[multiple] {
 }
 
 .servicos-checkboxes label {
-    display: block;
     margin-bottom: 5px;
 }
 
+/* Estilo genérico para botões secundários (ex.: adicionar categoria) */
+.btn-secondary {
+    display: inline-block;
+    padding: 10px 16px;
+    border-radius: 8px;
+    border: none;
+    background-color: #ad1457;
+    color: #fff;
+    cursor: pointer;
+    transition: transform 0.2s ease, background-color 0.2s ease;
+}
+.btn-secondary:hover {
+    transform: scale(1.03);
+    background-color: #d81b60;
+}
+
 /* =========================
-   CONSULTA DE AGEeNDAMENTOS
+   CONSULTA DE AGENDAMENTOS
 ========================= */
 body.consultas {
     font-family: 'Segoe UI', Arial, sans-serif;
@@ -621,7 +707,8 @@ tr:hover {
 }
 
 .form-group input,
-.form-group select {
+.form-group select,
+.form-group textarea {
     width: 100%;
     padding: 8px;
 }
@@ -652,14 +739,19 @@ tr:hover {
 @media (max-width: 768px) {
     .controls {
         flex-direction: column;
+        gap: 10px; /* Espaçamento entre os itens */
     }
     .controls select,
     .controls input,
     .status-dropdown-btn {
         width: 100%;
+        max-width: 100%; /* Garante que não ultrapasse o container */
+        margin: 5px 0; /* Margem vertical para melhor separação */
     }
     .status-dropdown-content {
         width: 100%;
+        max-height: 200px; /* Limita altura para evitar overflow excessivo */
+        overflow-y: auto; /* Adiciona rolagem se necessário */
     }
     .hero {
         padding: 15px 10px;
@@ -700,6 +792,13 @@ tr:hover {
         width: 200px;
         height: 150px;
     }
+    table {
+        font-size: 14px; /* Reduz tamanho da fonte na tabela para mobile */
+    }
+    th,
+    td {
+        padding: 8px; /* Reduz padding para caber melhor */
+    }
 }
 
 @media (max-width: 480px) {
@@ -715,5 +814,25 @@ tr:hover {
     .acesso-lr-btn {
         font-size: 11px;
         padding: 5px 10px;
+    }
+    .controls label {
+        font-size: 14px; /* Reduz fonte dos labels */
+    }
+    .controls select,
+    .controls input,
+    .status-dropdown-btn {
+        font-size: 14px; /* Ajusta tamanho da fonte */
+        padding: 6px; /* Reduz padding */
+    }
+    table {
+        font-size: 12px; /* Ainda mais pequeno para telas muito pequenas */
+    }
+    th,
+    td {
+        padding: 6px; /* Padding ainda menor */
+    }
+    .details-btn {
+        font-size: 10px; /* Ajusta botão de detalhes */
+        padding: 4px 8px;
     }
 }
