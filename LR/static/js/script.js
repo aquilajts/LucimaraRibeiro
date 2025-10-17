@@ -742,6 +742,29 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         function criarCalendarioSeNecessario() {
             if (calendar) return;
+
+            const processarSelecaoDeData = (dateStr, dateObj) => {
+                if (!podeSelecionarData(dateStr, dateObj)) {
+                    if (horariosMsg) {
+                        horariosMsg.style.display = 'block';
+                        horariosMsg.textContent = 'Nenhum horário compatível com os serviços selecionados para esta data.';
+                    }
+                    if (calendar) {
+                        calendar.unselect();
+                    }
+                    return;
+                }
+
+                dataInput.value = dateStr;
+                carregarHorarios(dateStr);
+
+                document.querySelectorAll('.fc-day-selected').forEach(el => el.classList.remove('fc-day-selected'));
+                const cell = document.querySelector(`.fc-day[data-date="${dateStr}"]`);
+                if (cell) {
+                    cell.classList.add('fc-day-selected');
+                }
+            };
+
             calendar = new FullCalendar.Calendar(calendarEl, {
                 initialView: 'dayGridMonth',
                 initialDate: minDate,
@@ -756,20 +779,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                     return podeSelecionarData(selectionInfo.startStr, selectionInfo.start);
                 },
                 select(info) {
-                    const dateStr = info.startStr;
-                    if (!podeSelecionarData(dateStr, info.start)) {
-                        if (horariosMsg) {
-                            horariosMsg.style.display = 'block';
-                            horariosMsg.textContent = 'Nenhum horário compatível com os serviços selecionados para esta data.';
-                        }
-                        calendar.unselect();
-                        return;
-                    }
-                    dataInput.value = dateStr;
-                    carregarHorarios(dateStr);
-                    document.querySelectorAll('.fc-day-selected').forEach(el => el.classList.remove('fc-day-selected'));
-                    const cell = document.querySelector(`.fc-day[data-date="${dateStr}"]`);
-                    if (cell) cell.classList.add('fc-day-selected');
+                    processarSelecaoDeData(info.startStr, info.start);
+                },
+                dateClick(info) {
+                    processarSelecaoDeData(info.dateStr, info.date);
                 },
                 datesSet() {
                     atualizarDisponibilidadeCalendario();

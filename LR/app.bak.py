@@ -1,3 +1,4 @@
+
 from flask import Flask, render_template, request, redirect, session, url_for, jsonify
 import logging
 from supabase import create_client, Client
@@ -6,6 +7,7 @@ from datetime import datetime, timedelta, time
 import os
 import zoneinfo
 import math
+import time as time_module
 from dotenv import load_dotenv
 from pathlib import Path
 
@@ -17,7 +19,7 @@ load_dotenv(dotenv_path=dotenv_path)
 logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s [%(levelname)s] %(message)s',
-    handlers=[59
+    handlers=[
         logging.StreamHandler(),
         logging.FileHandler('app.log')
     ]
@@ -50,6 +52,109 @@ else:
 
 # Timezone
 TZ = zoneinfo.ZoneInfo("America/Sao_Paulo")
+
+CACHE_TTL_SECONDS = 300  # 5 minutos de cache para dados estáveis
+TRANSIENT_ERROR_KEYWORDS = (
+    "ConnectionTerminated",
+    "RemoteProtocolError",
+    "ServerDisconnectedError",
+    "ConnectionResetError",
+    "ReadError",
+    "ReadTimeout",
+)
+
+SERVICE_INFO_CACHE: dict[tuple[int, ...], tuple[float, list]] = {}
+PROFISSIONAL_INFO_CACHE: dict[int, tuple[float, dict]] = {}
+
+
+def _cache_get(cache, key):
+    entry = cache.get(key)
+    if not entry:
+        return None
+    timestamp, value = entry
+    if time_module.time() - timestamp > CACHE_TTL_SECONDS:
+        cache.pop(key, None)
+        return None
+    return value
+
+
+def _cache_set(cache, key, value):
+    cache[key] = (time_module.time(), value)
+
+
+def _normalize_service_ids(ids):
+    try:
+        return tuple(sorted(int(sid) for sid in ids))
+    except (TypeError, ValueError):
+        return tuple()
+
+
+def supabase_execute_with_retry(callback, retries=3, delay=0.3):
+    last_exc = None
+    for attempt in range(retries):
+        try:
+            return callback()
+        except Exception as exc:  # noqa: BLE001 - Queremos capturar erros transitórios específicos
+            message = repr(exc)
+            if attempt < retries - 1 and any(keyword in message for keyword in TRANSIENT_ERROR_KEYWORDS):
+                logger.warning(
+                    "Erro transitório ao consultar Supabase (tentativa %s/%s): %s",
+                    attempt + 1,
+                    retries,
+                    message,
+                )
+                time_module.sleep(delay * (attempt + 1))
+                last_exc = exc
+                continue
+            raise
+    if last_exc:
+        raise last_exc
+
+
+def get_servicos_info(ids):
+    if not supabase:
+        return []
+    normalized_ids = _normalize_service_ids(ids)
+    if not normalized_ids:
+        return []
+    cached = _cache_get(SERVICE_INFO_CACHE, normalized_ids)
+    if cached is not None:
+        return cached
+    response = supabase_execute_with_retry(
+        lambda: supabase
+        .table("servicos")
+        .select("id_servico, duracao_minutos, preco")
+        .in_("id_servico", list(normalized_ids))
+        .execute()
+    )
+    data = response.data or []
+    _cache_set(SERVICE_INFO_CACHE, normalized_ids, data)
+    return data
+
+
+def get_profissional_config(id_profissional):
+    if not supabase:
+        return None
+    try:
+        pid = int(id_profissional)
+    except (TypeError, ValueError):
+        return None
+    cached = _cache_get(PROFISSIONAL_INFO_CACHE, pid)
+    if cached is not None:
+        return cached
+    response = supabase_execute_with_retry(
+        lambda: supabase
+        .table("profissionais")
+        .select("horario_inicio, horario_fim, dias_trabalho")
+        .eq("id_profissional", pid)
+        .execute()
+    )
+    data = (response.data or [])
+    if data:
+        config = data[0]
+        _cache_set(PROFISSIONAL_INFO_CACHE, pid, config)
+        return config
+    return None
 
 # Funções Auxiliares
 def usuario_logado():
@@ -510,19 +615,24 @@ def api_horarios_disponiveis(id_profissional, data):
         if not id_servicos:
             logger.error("Lista de id_servicos vazia")
             return jsonify({"error": "Nenhum serviço selecionado"}), 400
-        servicos = supabase.table("servicos").select("duracao_minutos").in_("id_servico", id_servicos).execute().data
-        duracao_total = sum(s['duracao_minutos'] for s in servicos)
+        servicos = get_servicos_info(id_servicos)
+        if not servicos:
+            logger.error("Serviços não encontrados para cálculo de disponibilidade: %s", id_servicos)
+            return jsonify({"error": "Serviços não encontrados"}), 404
+        duracao_total = sum((s.get('duracao_minutos') or 0) for s in servicos)
         buffer_extra = math.floor(duracao_total / 20) * 5
         duracao_total += buffer_extra
         logger.debug("Duração total ajustada: %s min", duracao_total)
+        if duracao_total <= 0:
+            logger.warning("Duração total calculada como zero para serviços %s", id_servicos)
+            return jsonify([])
 
         # Consultar profissional
         logger.debug("Consultando profissional %s", id_profissional)
-        prof_response = supabase.table("profissionais").select("horario_inicio, horario_fim, dias_trabalho").eq("id_profissional", id_profissional).execute()
-        if not prof_response.data:
+        prof = get_profissional_config(id_profissional)
+        if not prof:
             logger.error("Profissional %s não encontrado", id_profissional)
             return jsonify({"error": "Profissional não encontrado"}), 404
-        prof = prof_response.data[0]
         logger.debug("Profissional encontrado: %s", prof)
 
         # Tentar parsear horários com diferentes formatos
@@ -567,12 +677,15 @@ def api_horarios_disponiveis(id_profissional, data):
         # Consultar agendamentos existentes
         logger.debug("Consultando agendamentos para profissional %s na data %s", id_profissional, data)
         # Considera agendamentos que bloqueiam horário: pendentes e agendados
-        agends = supabase.table("agendamentos") \
-            .select("hora_agendamento, duracao_total") \
-            .eq("id_profissional", id_profissional) \
-            .eq("data_agendamento", data) \
-            .in_("status", ["🟡Pendente", "🔵Agendado"]) \
-            .execute().data
+        agends_resp = supabase_execute_with_retry(
+            lambda: supabase.table("agendamentos")
+            .select("hora_agendamento, duracao_total")
+            .eq("id_profissional", id_profissional)
+            .eq("data_agendamento", data)
+            .in_("status", ["🟡Pendente", "🔵Agendado"])
+            .execute()
+        )
+        agends = agends_resp.data or []
         logger.debug("Agendamentos encontrados: %s", agends)
 
         occupied = []
@@ -651,14 +764,14 @@ def api_agendar():
         return jsonify({"success": False, "error": "Nenhum serviço selecionado"}), 400
 
     try:
-        servicos = supabase.table("servicos").select("duracao_minutos, preco").in_("id_servico", id_servicos).execute().data
+        servicos = get_servicos_info(id_servicos)
         if not servicos:
             logger.error("Nenhum serviço encontrado para IDs: %s", id_servicos)
             return jsonify({"success": False, "error": "Serviços não encontrados"}), 404
-        duracao_total = sum(s['duracao_minutos'] for s in servicos)
+        duracao_total = sum((s.get('duracao_minutos') or 0) for s in servicos)
         buffer_extra = math.floor(duracao_total / 20) * 5
         duracao_total += buffer_extra
-        preco_total = sum(float(s['preco']) for s in servicos)
+        preco_total = sum(float(s.get('preco') or 0) for s in servicos)
         if duracao_total == 0 or preco_total == 0:
             logger.error("Duração ou preço total calculado como zero para serviços: %s", id_servicos)
             return jsonify({"success": False, "error": "Erro nos cálculos de duração ou preço"}), 400
@@ -698,8 +811,10 @@ def api_profissional(id_profissional):
     logger.info("Acessando API /api/profissional/%s", id_profissional)
     if supabase:
         try:
-            prof = supabase.table("profissionais").select("horario_inicio, horario_fim, dias_trabalho").eq("id_profissional", id_profissional).single().execute().data
-            return jsonify(prof)
+            prof = get_profissional_config(id_profissional)
+            if prof:
+                return jsonify(prof)
+            return jsonify({"error": "Profissional não encontrado"}), 404
         except Exception as e:
             logger.error("Erro ao consultar profissional: %s", str(e))
             return jsonify({"error": "Profissional não encontrado"}), 404
