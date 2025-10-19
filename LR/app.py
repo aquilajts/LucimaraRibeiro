@@ -1219,10 +1219,9 @@ def api_agendamento_status(id):
         logger.warning("Status inválido recebido: %s", novo_status)
         return jsonify({"success": False, "error": "Status inválido"}), 400
 
-    try:
-        ag_id = int(id)
-    except (TypeError, ValueError):
-        logger.error("ID de agendamento inválido: %s", id)
+    ag_id = str(id or "").strip()
+    if not ag_id:
+        logger.error("ID de agendamento vazio ou inválido: %s", id)
         return jsonify({"success": False, "error": "ID inválido"}), 400
 
     try:

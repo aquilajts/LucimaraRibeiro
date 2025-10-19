@@ -186,7 +186,7 @@ function criarAgendamentoCard(ag) {
                 <div><dt>Telefone</dt><dd>${telefoneHtml}</dd></div>
                 <div><dt>Duração total</dt><dd>${escapeHtml(String(ag.duracao_total || 0))} min</dd></div>
                 <div><dt>Preço</dt><dd>R$ ${precoFormatado}</dd></div>
-                <div><dt>Status</dt><dd><div class="booking-card__status-control"><span class="booking-card__status-chip-container">${buildStatusChip(currentStatus)}</span><select id="${statusSelectId}" class="booking-card__status-select">${statusOptionsHtml}</select></div></dd></div>
+                <div><dt>Status</dt><dd><div class="booking-card__status-control"><select id="${statusSelectId}" class="booking-card__status-select">${statusOptionsHtml}</select></div></dd></div>
             </dl>
             <div class="booking-card__services">
                 <strong>Serviços</strong>
@@ -199,7 +199,6 @@ function criarAgendamentoCard(ag) {
     const details = card.querySelector('.booking-card__details');
     const manageBtn = card.querySelector('.booking-card__manage-btn');
     const statusSelect = card.querySelector('.booking-card__status-select');
-    const statusChipContainer = card.querySelector('.booking-card__status-chip-container');
     const summaryStatusWrapper = card.querySelector('.booking-card__summary-status');
     let currentStatusValue = currentStatus;
 
@@ -219,7 +218,7 @@ function criarAgendamentoCard(ag) {
         });
     }
 
-    if (statusSelect && statusChipContainer) {
+    if (statusSelect) {
         statusSelect.addEventListener('change', async (event) => {
             const newStatus = event.target.value;
             if (!newStatus || newStatus === currentStatusValue) {
@@ -245,7 +244,6 @@ function criarAgendamentoCard(ag) {
                     throw new Error(result.error || 'Não foi possível atualizar o status.');
                 }
                 currentStatusValue = newStatus;
-                statusChipContainer.innerHTML = buildStatusChip(newStatus);
                 if (summaryStatusWrapper) {
                     summaryStatusWrapper.innerHTML = buildStatusChip(newStatus);
                 }
