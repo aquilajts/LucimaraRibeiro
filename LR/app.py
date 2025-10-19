@@ -8,6 +8,7 @@ import os
 import zoneinfo
 import math
 import time as time_module
+import re
 from dotenv import load_dotenv
 from pathlib import Path
 
@@ -65,6 +66,16 @@ TRANSIENT_ERROR_KEYWORDS = (
 
 SERVICE_INFO_CACHE: dict[tuple[int, ...], tuple[float, list]] = {}
 PROFISSIONAL_INFO_CACHE: dict[int, tuple[float, dict]] = {}
+
+ALLOWED_STATUS = {
+    "🔴Desistência",
+    "Desistência",
+    "🔴Não veio",
+    "🟡Pendente",
+    "🟢Atendido",
+    "🔵Agendado",
+    "⚫Pago",
+}
 
 
 def _cache_get(cache, key):
@@ -187,171 +198,197 @@ def index():
 def login():
     logger.info("Acessando rota /login, método: %s", request.method)
     erro = None
-    solicitar_aniversario = False
-    reset_senha = False
+    stage = "phone"
     nome = None
-    aniversario = None
+    ddd = "27"
+    telefone = None
+
+    pending_user = session.get("pending_user")
 
     if request.method == "POST":
-        nome = request.form.get("nome")
-        senha = request.form.get("senha")
-        logger.info("Tentativa de login - Nome: %s", nome)
-
-        if not nome or not senha:
-            erro = "Preencha todos os campos."
-            logger.error("Erro no login: Campos vazios")
-        else:
-            if supabase:
-                email = f"{nome.lower().replace(' ', '_')}@naildesigner.com"
-                logger.debug("Consultando cliente no Supabase - Nome_lower: %s, Email: %s", nome.lower(), email)
-                cliente = supabase.table("clientes").select("*").eq("nome_lower", nome.lower()).execute()
-                logger.debug("Resposta da query clientes: %s", cliente.data)
-
-                if cliente.data:
-                    cliente = cliente.data[0]
-                    if cliente.get("senha") == senha:
-                        if not cliente.get("aniversario") or cliente.get("aniversario") == '0001-01-01':
-                            session["temp_user"] = cliente
-                            solicitar_aniversario = True
-                            logger.info("Usuário %s sem aniversário, solicitando", nome)
-                        else:
-                            session["user"] = cliente
-                            logger.info("Usuário %s logado com sucesso", nome)
-                            return redirect(url_for("agendamento"))
+        stage = request.form.get("stage", "phone")
+        if stage == "birthday":
+            aniversario = (request.form.get("aniversario") or "").strip()
+            logger.info("Processando etapa de aniversário")
+            if not pending_user or "id_cliente" not in pending_user:
+                erro = "Sessão expirada. Informe seus dados novamente."
+                logger.error("Etapa de aniversário sem usuário pendente na sessão")
+                session.pop("pending_user", None)
+                stage = "phone"
+            elif not aniversario:
+                erro = "Informe a data de aniversário."
+                logger.error(
+                    "Data de aniversário vazia para usuário %s",
+                    pending_user.get("id_cliente"),
+                )
+            else:
+                try:
+                    aniversario_date = datetime.strptime(aniversario, "%Y-%m-%d").date()
+                except ValueError:
+                    erro = "Informe uma data de aniversário válida."
+                    logger.error("Data de aniversário inválida recebida: %s", aniversario)
+                else:
+                    today = datetime.now(TZ).date()
+                    if aniversario_date > today:
+                        erro = "A data de aniversário não pode ser futura."
+                        logger.error("Data de aniversário futura informada: %s", aniversario)
                     else:
-                        erro = "Senha incorreta."
-                        logger.error("Erro no login: Senha incorreta para %s", nome)
-                else:
-                    data = {
-                        "nome": nome,
-                        "email": email,
-                        "senha": senha,
-                        "telefone": None
-                    }
-                    try:
-                        logger.debug("Cadastrando novo usuário: %s", data)
-                        novo = supabase.table("clientes").insert(data).execute()
-                        session["temp_user"] = novo.data[0]
-                        solicitar_aniversario = True
-                        logger.info("Novo usuário %s cadastrado", nome)
-                    except Exception as e:
-                        erro = "Erro ao cadastrar usuário."
-                        logger.error("Erro ao cadastrar: %s", str(e))
+                        try:
+                            supabase.table("clientes").update({
+                                "aniversario": aniversario
+                            }).eq("id_cliente", pending_user["id_cliente"]).execute()
+                            pending_user["aniversario"] = aniversario
+                            session["user"] = pending_user
+                            session.pop("pending_user", None)
+                            logger.info(
+                                "Aniversário registrado para o cliente %s",
+                                pending_user["id_cliente"],
+                            )
+                            return redirect(url_for("agendamento"))
+                        except Exception as exc:
+                            erro = "Não foi possível salvar a data agora."
+                            logger.error(
+                                "Erro ao salvar aniversário do cliente %s: %s",
+                                pending_user.get("id_cliente"),
+                                exc,
+                            )
+            stage = "birthday"
+        else:
+            session.pop("pending_user", None)
+            nome = (request.form.get("nome") or "").strip()
+            ddd = (request.form.get("ddd") or "").strip() or "27"
+            telefone = (request.form.get("telefone") or "").strip()
+            logger.info("Tentativa de login - Nome: %s", nome)
+
+            if not nome or not telefone or not ddd:
+                erro = "Informe nome, DDD e telefone."
+                logger.error("Erro no login: campos vazios")
             else:
-                if nome == "demo" and senha == "123456":
-                    session["user"] = {"nome": "Demo"}
-                    logger.info("Login demo bem-sucedido")
-                    return redirect(url_for("agendamento"))
+                ddd_digitos = re.sub(r"\D", "", ddd)
+                telefone_digitos = re.sub(r"\D", "", telefone)
+                if ddd_digitos:
+                    ddd = ddd_digitos
+                if telefone_digitos:
+                    telefone = telefone_digitos
+                if len(ddd_digitos) != 2:
+                    erro = "Informe um DDD válido (2 dígitos)."
+                    logger.error("Erro no login: DDD inválido para %s", nome)
+                elif len(telefone_digitos) != 9:
+                    erro = "Informe um telefone válido com 9 dígitos."
+                    logger.error("Erro no login: telefone inválido para %s", nome)
                 else:
-                    erro = "Usuário demo inválido."
-                    logger.error("Erro no login demo")
+                    telefone_completo = f"{ddd_digitos}{telefone_digitos}"
+                    if supabase:
+                        try:
+                            nome_lower = nome.lower()
+                            base_email = nome_lower.replace(' ', '_')
+                            email = f"{base_email}_{telefone_completo}@naildesigner.com"
+                            logger.debug(
+                                "Consultando cliente no Supabase - Nome_lower: %s, Email: %s",
+                                nome_lower,
+                                email,
+                            )
+                            resposta_match = supabase.table("clientes").select("*") \
+                                .eq("nome_lower", nome_lower) \
+                                .eq("telefone", telefone_completo).execute()
+                            dados_match = resposta_match.data or []
 
-    logger.debug("Renderizando login.html com erro: %s, solicitar_aniversario: %s", erro, solicitar_aniversario)
-    return render_template("login.html", erro=erro, solicitar_aniversario=solicitar_aniversario,
-                          reset_senha=reset_senha, nome=nome, aniversario=aniversario, supabase=supabase)
+                            if dados_match:
+                                cliente = dados_match[0]
+                                if cliente.get("aniversario"):
+                                    session["user"] = cliente
+                                    logger.info("Usuário %s autenticado (nome + telefone)", nome)
+                                    return redirect(url_for("agendamento"))
+                                session["pending_user"] = cliente
+                                logger.info("Usuário %s precisa informar aniversário", nome)
+                                return redirect(url_for("login"))
 
-@app.route("/atualizar_aniversario", methods=["POST"])
-def atualizar_aniversario():
-    logger.info("Acessando rota /atualizar_aniversario")
-    if "temp_user" not in session:
-        logger.error("Sessão temp_user ausente")
-        return redirect(url_for("login"))
+                            resposta_nome = supabase.table("clientes").select("*") \
+                                .eq("nome_lower", nome_lower).execute()
+                            dados_nome = resposta_nome.data or []
 
-    aniversario = request.form.get("aniversario")
-    telefone = request.form.get("telefone")
-    logger.info("Atualizando aniversário: %s, telefone: %s", aniversario, telefone)
+                            for cliente in dados_nome:
+                                telefone_cadastrado = re.sub(
+                                    r"\D",
+                                    "",
+                                    str(cliente.get("telefone") or ""),
+                                )
+                                if not telefone_cadastrado:
+                                    logger.info("Atualizando telefone ausente para %s", nome)
+                                    supabase.table("clientes").update({
+                                        "telefone": telefone_completo
+                                    }).eq("id_cliente", cliente["id_cliente"]).execute()
+                                    cliente["telefone"] = telefone_completo
+                                    if cliente.get("aniversario"):
+                                        session["user"] = cliente
+                                        logger.info(
+                                            "Usuário %s autenticado após preencher telefone",
+                                            nome,
+                                        )
+                                        return redirect(url_for("agendamento"))
+                                    session["pending_user"] = cliente
+                                    logger.info(
+                                        "Usuário %s precisa informar aniversário após preencher telefone",
+                                        nome,
+                                    )
+                                    return redirect(url_for("login"))
 
-    user = session["temp_user"]
-    if supabase:
-        try:
-            logger.debug("Atualizando cliente no Supabase - id_cliente: %s", user["id_cliente"])
-            supabase.table("clientes").update({
-                "aniversario": aniversario,
-                "telefone": telefone
-            }).eq("id_cliente", user["id_cliente"]).execute()
-            user["aniversario"] = aniversario
-            user["telefone"] = telefone
-            session["user"] = user
-            session.pop("temp_user", None)
-            logger.info("Usuário atualizado e temp_user removido")
-            return redirect(url_for("agendamento"))
-        except Exception as e:
-            logger.error("Erro ao atualizar aniversário: %s", str(e))
-            return jsonify(erro="Erro ao salvar dados."), 500
-    return redirect(url_for("agendamento"))
+                            payload = {
+                                "nome": nome,
+                                "email": email,
+                                "telefone": telefone_completo
+                            }
+                            logger.debug("Cadastrando novo usuário via telefone: %s", payload)
+                            novo = supabase.table("clientes").insert(payload).execute()
+                            cliente = novo.data[0]
+                            cliente["telefone"] = telefone_completo
+                            session["pending_user"] = cliente
+                            logger.info("Novo usuário %s cadastrado; aguardando aniversário", nome)
+                            return redirect(url_for("login"))
+                        except Exception as exc:
+                            erro = "Erro ao processar login."
+                            logger.error("Erro ao autenticar usuário %s: %s", nome, exc)
+                    else:
+                        if nome.lower() == "demo" and telefone_completo == "27000000000":
+                            session["user"] = {"nome": "Demo", "telefone": telefone_completo}
+                            logger.info("Login demo bem-sucedido")
+                            return redirect(url_for("agendamento"))
+                        erro = "Serviço de login indisponível."
+                        logger.error("Supabase indisponível para login.")
 
-@app.route("/esqueci_senha", methods=["POST"])
-def esqueci_senha():
-    logger.info("Acessando rota /esqueci_senha")
-    nova_senha = request.form.get("nova_senha")
-    logger.debug("Nova senha presente: %s", bool(nova_senha))
+    pending_user = session.get("pending_user")
+    birthday_step = bool(pending_user)
+    birthday_max = datetime.now(TZ).strftime('%Y-%m-%d')
+    pending_info = None
+    if pending_user:
+        telefone_digits = re.sub(r"\D", "", str(pending_user.get("telefone") or ""))
+        ddd_prefill = telefone_digits[:2] if len(telefone_digits) >= 2 else "27"
+        telefone_prefill = telefone_digits[2:] if len(telefone_digits) > 2 else ""
+        pending_info = {
+            "nome": pending_user.get("nome") or "",
+            "ddd": ddd_prefill,
+            "telefone": telefone_prefill,
+            "aniversario": pending_user.get("aniversario"),
+        }
 
-    nome = request.form.get("nome", "").strip().lower()
-    aniversario = request.form.get("aniversario")
+    logger.debug(
+        "Renderizando login.html com erro: %s, stage: %s, birthday_step: %s",
+        erro,
+        stage,
+        birthday_step,
+    )
+    return render_template(
+        "login.html",
+        erro=erro,
+        nome=nome,
+        ddd=ddd or "27",
+        telefone=telefone,
+        birthday_step=birthday_step,
+        pending_user=pending_info,
+        birthday_max=birthday_max,
+        supabase=supabase,
+    )
 
-    if not nova_senha:
-        logger.info("Validação de nome e aniversário - Nome: %s, Aniversário: %s", nome, aniversario)
-        if not nome or not aniversario:
-            logger.error("Campos nome/aniv vazios")
-            return jsonify({"success": False, "error": "Preencha todos os campos."})
-
-        if not supabase:
-            logger.error("Supabase não inicializado")
-            return jsonify({"success": False, "error": "Erro no servidor."})
-
-        try:
-            logger.debug("Consultando cliente no Supabase - Nome_lower: %s", nome)
-            cliente = supabase.table("clientes").select("*").eq("nome_lower", nome).execute()
-            logger.debug("Resposta da query clientes: %s", cliente.data)
-            if cliente.data:
-                cliente = cliente.data[0]
-                logger.debug("Cliente encontrado: %s", cliente)
-                if str(cliente.get("aniversario")) == aniversario:
-                    logger.info("Validação bem-sucedida para %s", nome)
-                    return jsonify({"success": True})
-                else:
-                    logger.error("Dados de aniversário não conferem para %s", nome)
-                    return jsonify({"success": False, "error": "Dados não conferem."})
-            else:
-                logger.error("Usuário não encontrado: %s", nome)
-                return jsonify({"success": False, "error": "Usuário não encontrado."})
-        except Exception as e:
-            logger.error("Erro Supabase em /esqueci_senha: %s", str(e))
-            return jsonify({"success": False, "error": f"Erro no servidor: {str(e)}"})
-
-    else:
-        logger.info("Redefinindo senha para Nome: %s, Aniversário: %s", nome, aniversario)
-        if not nome or not aniversario:
-            logger.error("Campos nome/aniv ausentes")
-            return jsonify({"success": False, "error": "Erro na recuperação de senha."})
-
-        if not supabase:
-            logger.error("Supabase não inicializado")
-            return jsonify({"success": False, "error": "Erro no servidor."})
-
-        try:
-            logger.debug("Consultando cliente para redefinição de senha - Nome_lower: %s", nome)
-            cliente = supabase.table("clientes").select("*").eq("nome_lower", nome).execute()
-            logger.debug("Resposta da query clientes: %s", cliente.data)
-            if cliente.data:
-                cliente = cliente.data[0]
-                if str(cliente.get("aniversario")) == aniversario:
-                    if len(nova_senha) < 6:
-                        logger.error("Nova senha muito curta para %s", nome)
-                        return jsonify({"success": False, "error": "A nova senha deve ter pelo menos 6 dígitos."})
-                    logger.debug("Atualizando senha no Supabase - id_cliente: %s", cliente["id_cliente"])
-                    supabase.table("clientes").update({"senha": nova_senha}).eq("id_cliente", cliente["id_cliente"]).execute()
-                    logger.info("Senha redefinida com sucesso para %s", nome)
-                    return redirect(url_for("login", msg="Senha redefinida com sucesso."))
-                else:
-                    logger.error("Dados de aniversário não conferem para %s", nome)
-                    return jsonify({"success": False, "error": "Dados não conferem."})
-            else:
-                logger.error("Usuário não encontrado: %s", nome)
-                return jsonify({"success": False, "error": "Usuário não encontrado."})
-        except Exception as e:
-            logger.error("Erro Supabase em /esqueci_senha: %s", str(e))
-            return jsonify({"success": False, "error": f"Erro no servidor: {str(e)}"})
 
 @app.route("/logout")
 def logout():
@@ -1163,6 +1200,45 @@ def api_agendamento(id):
         except Exception as e:
             logger.error(f"Erro PUT ao atualizar agendamento {id}: {str(e)}")
             return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/agendamento/<id>/status", methods=["PATCH"])
+def api_agendamento_status(id):
+    logger.info("Atualizando status do agendamento %s", id)
+    if not supabase:
+        logger.error("Supabase não inicializado em PATCH de status")
+        return jsonify({"success": False, "error": "Serviço indisponível"}), 500
+
+    payload = request.get_json(silent=True) or {}
+    novo_status = payload.get("status")
+    if not novo_status:
+        logger.error("Status não fornecido no PATCH")
+        return jsonify({"success": False, "error": "Status obrigatório"}), 400
+
+    if novo_status not in ALLOWED_STATUS:
+        logger.warning("Status inválido recebido: %s", novo_status)
+        return jsonify({"success": False, "error": "Status inválido"}), 400
+
+    try:
+        ag_id = int(id)
+    except (TypeError, ValueError):
+        logger.error("ID de agendamento inválido: %s", id)
+        return jsonify({"success": False, "error": "ID inválido"}), 400
+
+    try:
+        response = supabase.table("agendamentos").update({
+            "status": novo_status
+        }).eq("id_agendamento", ag_id).execute()
+
+        if not response.data:
+            logger.error("Agendamento %s não encontrado ao atualizar status", ag_id)
+            return jsonify({"success": False, "error": "Agendamento não encontrado"}), 404
+
+        logger.info("Status do agendamento %s atualizado para %s", ag_id, novo_status)
+        return jsonify({"success": True})
+    except Exception as exc:
+        logger.error("Erro ao atualizar status do agendamento %s: %s", ag_id, str(exc))
+        return jsonify({"success": False, "error": "Erro ao atualizar status"}), 500
 
 # Certifique-se de que o bloco acima está fechado antes da próxima rota
 @app.route("/api/teste/<int:id_profissional>")

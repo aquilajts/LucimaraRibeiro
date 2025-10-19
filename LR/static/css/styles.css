@@ -226,6 +226,17 @@ body {
     font-size: 14px;
 }
 
+.login-form .phone-fields {
+    display: grid;
+    grid-template-columns: minmax(70px, 90px) 1fr;
+    gap: 12px;
+    align-items: center;
+}
+
+.login-form .phone-fields input#ddd {
+    text-align: center;
+}
+
 .form-container input,
 .form-container select,
 .form-container textarea,
@@ -237,6 +248,46 @@ body {
     outline: none;
     font-size: 16px;
     transition: transform 0.2s ease;
+}
+
+.login-step {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 24px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    text-align: left;
+}
+
+.login-step--birthday {
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
+}
+
+.login-step__greeting {
+    font-size: 24px;
+    font-weight: 600;
+    color: #fff;
+}
+
+.login-step__details {
+    color: rgba(255, 255, 255, 0.85);
+    line-height: 1.5;
+}
+
+.login-step__restart {
+    margin-top: 10px;
+    font-size: 14px;
+}
+
+.login-step__restart a {
+    color: #f3c4ff;
+    text-decoration: underline;
+}
+
+.login-step__restart a:hover {
+    color: #ffffff;
 }
 
 .form-container select:disabled,
@@ -318,6 +369,21 @@ body {
 
 .modal-content input {
     border: 1px solid #ccc;
+}
+
+body.modal-open {
+    overflow: hidden;
+}
+
+.modal-text {
+    margin-bottom: 15px;
+    color: #333;
+}
+
+.modal-error {
+    color: #ad1457;
+    min-height: 18px;
+    margin: 10px 0 0;
 }
 
 .close {
@@ -786,17 +852,31 @@ body.consultas {
     border: 1px solid rgba(0, 0, 0, 0.04);
 }
 
+.booking-card__header {
+    display: flex;
+    align-items: stretch;
+    gap: 12px;
+    padding: 18px 18px 0;
+    flex-wrap: wrap;
+}
+
 .booking-card__toggle {
-    width: 100%;
+    flex: 1;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    padding: 18px;
+    padding: 14px 16px;
     background: none;
     border: none;
     text-align: left;
     cursor: pointer;
+    border-radius: 14px;
+    transition: background 0.2s ease;
+}
+
+.booking-card__toggle:hover {
+    background: rgba(0, 0, 0, 0.04);
 }
 
 .booking-card__summary {
@@ -850,13 +930,6 @@ body.consultas {
     transform: rotate(135deg);
 }
 
-.booking-card__details {
-    padding: 0 18px 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-}
-
 .booking-card__meta {
     display: grid;
     gap: 12px;
@@ -896,15 +969,24 @@ body.consultas {
 
 .booking-card__footer {
     display: flex;
-    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
     gap: 12px;
 }
 
-.booking-card__totals {
+.booking-card__details {
+    padding: 16px 18px 20px;
     display: flex;
-    justify-content: space-between;
-    font-weight: 600;
-    color: #2d1b13;
+    flex-direction: column;
+    gap: 14px;
+    border-top: 1px solid rgba(0, 0, 0, 0.05);
+    margin-top: 12px;
+}
+.booking-card:not(.booking-card--open) .booking-card__details {
+    display: none;
+}
+.booking-card:not(.booking-card--open) .booking-card__header {
+    padding-bottom: 18px;
 }
 
 .booking-card__actions {
@@ -925,6 +1007,18 @@ body.consultas {
     align-items: center;
     gap: 8px;
     transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.booking-card__manage-btn {
+    padding: 10px 20px;
+    font-size: 14px;
+    white-space: nowrap;
+    align-self: stretch;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    min-width: 120px;
 }
 
 .details-btn:hover {
@@ -1263,6 +1357,14 @@ tr:hover {
         font-size: 16px;
         padding: 18px;
     }
+    .booking-card__header {
+        padding: 16px 16px 0;
+    }
+    .booking-card__manage-btn {
+        min-width: 0;
+        width: 100%;
+        align-self: stretch;
+    }
     .form-container,
     .login-container {
         margin: 20px;
@@ -1271,6 +1373,56 @@ tr:hover {
     .form-container h2,
     .login-container h2 {
         font-size: 22px;
+    }
+    .login-step {
+        padding: 20px 16px;
+
+        .booking-card__phone-link {
+            margin-left: 8px;
+            font-size: 1rem;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.2s ease, color 0.2s ease;
+        }
+
+        .booking-card__phone-link:hover {
+            transform: scale(1.1);
+            color: #128C7E;
+        }
+
+        .booking-card__status-control {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .booking-card__status-select {
+            border: 1px solid rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            padding: 6px 10px;
+            font-size: 0.95rem;
+            background-color: #fff;
+            color: #333;
+            cursor: pointer;
+            min-width: 140px;
+        }
+
+        .booking-card__status-select:focus {
+            outline: 2px solid rgba(139, 0, 0, 0.2);
+            outline-offset: 2px;
+        }
+
+        .booking-card__status-select--loading {
+            opacity: 0.6;
+            cursor: progress;
+        }
+        gap: 14px;
+    }
+    .login-step__greeting {
+        font-size: 20px;
     }
     .carousel img {
         width: 200px;
@@ -1307,6 +1459,12 @@ tr:hover {
     .status-dropdown-btn {
         font-size: 14px; /* Ajusta tamanho da fonte */
         padding: 6px; /* Reduz padding */
+    }
+    .login-step__greeting {
+        font-size: 18px;
+    }
+    .login-step__details {
+        font-size: 14px;
     }
     table {
         font-size: 12px; /* Ainda mais pequeno para telas muito pequenas */

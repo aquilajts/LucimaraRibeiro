@@ -4,11 +4,195 @@ console.log("Script loaded");
 let agendamentosAtuais = [];
 let agendamentoIdAtual = null;
 
+const STATUS_META = {
+    "🔴Desistência": { tone: "danger", label: "Desistência" },
+    "Desistência": { tone: "danger", label: "Desistência" },
+    "🔴Não veio": { tone: "danger", label: "Não veio" },
+    "🟡Pendente": { tone: "warning", label: "Pendente" },
+    "🟢Atendido": { tone: "success", label: "Atendido" },
+    "🔵Agendado": { tone: "info", label: "Agendado" },
+    "⚫Pago": { tone: "neutral", label: "Pago" }
+};
+
+const HTML_ESCAPE_MAP = {
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+};
+
+function escapeHtml(value) {
+    if (value === null || value === undefined) return "";
+    return String(value).replace(/[&<>"']/g, ch => HTML_ESCAPE_MAP[ch] || ch);
+}
+
+function buildStatusChip(statusRaw) {
+    const raw = statusRaw || "🟡Pendente";
+    const meta = STATUS_META[raw] || { tone: "neutral", label: raw };
+    const label = meta.label || raw;
+    return `<span class="status-chip status-chip--${meta.tone}" title="${escapeHtml(label)}">${escapeHtml(raw)}</span>`;
+}
+
+function initBirthdayCapture() {
+    const body = document.body;
+    if (!body || body.dataset.needsBirthday !== 'true') return;
+
+    const modal = document.getElementById('birthday-modal');
+    const form = document.getElementById('birthday-form');
+    const input = document.getElementById('birthday-input');
+    const errorEl = document.getElementById('birthday-error');
+    const submitBtn = document.getElementById('birthday-submit');
+    if (!modal || !form || !input || !submitBtn) return;
+
+    const enforceMax = body.dataset.birthdayMax;
+    if (enforceMax) input.max = enforceMax;
+
+    const showModal = () => {
+        modal.style.display = 'flex';
+        modal.setAttribute('aria-hidden', 'false');
+        body.classList.add('modal-open');
+        setTimeout(() => input.focus(), 100);
+    };
+
+    showModal();
+
+    const blockEscape = (event) => {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+    };
+
+    document.addEventListener('keydown', blockEscape, true);
+
+    modal.addEventListener('click', (event) => {
+        if (event.target === modal) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+    });
+
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (!input.value) {
+            if (errorEl) errorEl.textContent = 'Informe uma data válida.';
+            input.focus();
+            return;
+        }
+
+        if (errorEl) errorEl.textContent = '';
+        const originalText = submitBtn.textContent;
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Salvando...';
+
+        try {
+            const response = await fetch('/api/cliente/aniversario', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ aniversario: input.value })
+            });
+            let result = {};
+            try {
+                result = await response.json();
+            } catch (parseError) {
+                console.error('Erro ao interpretar resposta do aniversário:', parseError);
+            }
+            if (!response.ok || !result.success) {
+                throw new Error(result.error || 'Não foi possível salvar.');
+            }
+            body.dataset.needsBirthday = 'false';
+            modal.style.display = 'none';
+            modal.setAttribute('aria-hidden', 'true');
+            body.classList.remove('modal-open');
+            document.removeEventListener('keydown', blockEscape, true);
+        } catch (error) {
+            console.error('Erro ao salvar aniversário:', error);
+            if (errorEl) {
+                errorEl.textContent = error.message || 'Não foi possível salvar. Tente novamente.';
+            }
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = originalText;
+        }
+    });
+}
+
 // Função para formatar data
 function formatarData(dataStr) {
     if (!dataStr) return 'N/A';
     const [ano, mes, dia] = dataStr.split('-');
     return `${dia}/${mes}/${ano}`;
+}
+
+function criarAgendamentoCard(ag) {
+    const card = document.createElement('article');
+    card.className = 'booking-card booking-card--open';
+
+    const telefone = ag.cliente_telefone ? escapeHtml(ag.cliente_telefone) : '—';
+    const servicosLista = Array.isArray(ag.servicos_nomes) && ag.servicos_nomes.length
+        ? ag.servicos_nomes.map(escapeHtml).join(', ')
+        : 'N/A';
+    const precoNumero = Number(ag.preco_total ?? ag.preco ?? 0);
+    const precoFormatado = Number.isFinite(precoNumero) ? precoNumero.toFixed(2) : '0.00';
+    const statusChip = buildStatusChip(ag.status);
+
+    card.innerHTML = `
+        <div class="booking-card__header">
+            <button class="booking-card__toggle" type="button" aria-expanded="true">
+                <div class="booking-card__summary">
+                    <div class="booking-card__summary-main">
+                        <span class="booking-card__date">${escapeHtml(formatarData(ag.data_agendamento))}</span>
+                        <span class="booking-card__time">${escapeHtml(ag.hora_agendamento || '—')}</span>
+                    </div>
+                    <div class="booking-card__summary-side">
+                        <span class="booking-card__client">${escapeHtml(ag.cliente_nome || 'Cliente não identificado')}</span>
+                        ${statusChip}
+                    </div>
+                </div>
+                <span class="booking-card__chevron" aria-hidden="true"></span>
+            </button>
+            <button type="button" class="details-btn booking-card__manage-btn" data-id="${escapeHtml(String(ag.id_agendamento))}">Gerenciar</button>
+        </div>
+        <div class="booking-card__details">
+            <dl class="booking-card__meta">
+                <div><dt>Telefone</dt><dd>${telefone}</dd></div>
+                <div><dt>Duração total</dt><dd>${escapeHtml(String(ag.duracao_total || 0))} min</dd></div>
+                <div><dt>Preço</dt><dd>R$ ${precoFormatado}</dd></div>
+                <div><dt>Status</dt><dd>${statusChip}</dd></div>
+            </dl>
+            <div class="booking-card__services">
+                <strong>Serviços</strong>
+                <p>${servicosLista}</p>
+            </div>
+            <div class="booking-card__footer">
+                <div class="booking-card__totals">
+                    <span>${escapeHtml(formatarData(ag.data_agendamento))} · ${escapeHtml(ag.hora_agendamento || '—')}</span>
+                    <span>R$ ${precoFormatado}</span>
+                </div>
+            </div>
+        </div>
+    `;
+
+    const toggleBtn = card.querySelector('.booking-card__toggle');
+    const details = card.querySelector('.booking-card__details');
+    const manageBtn = card.querySelector('.booking-card__manage-btn');
+
+    if (toggleBtn && details) {
+        toggleBtn.addEventListener('click', () => {
+            const isOpen = card.classList.toggle('booking-card--open');
+            toggleBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        });
+    }
+
+    if (manageBtn) {
+        manageBtn.addEventListener('click', () => {
+            agendamentoIdAtual = ag.id_agendamento;
+            mostrarDetalhes(String(ag.id_agendamento));
+        });
+    }
+
+    return card;
 }
 
 // Carregar profissionais (tela de consulta de agendamentos)
@@ -59,12 +243,12 @@ async function carregarStatus() {
 async function carregarAgendamentos() {
     // Só executa nesta página específica
     const profSelect = document.getElementById('prof-select');
-    const tabela = document.getElementById('tabela-agendamentos');
-    const tbody = document.getElementById('corpo-tabela');
+    const listaWrapper = document.getElementById('tabela-agendamentos');
+    const lista = document.getElementById('corpo-tabela');
     const titulo = document.getElementById('titulo-agendamentos');
     const loading = document.getElementById('loading');
-    const error = document.getElementById('error');
-    if (!profSelect || !tabela || !tbody || !titulo) return;
+    const errorBox = document.getElementById('error');
+    if (!profSelect || !listaWrapper || !lista || !titulo) return;
 
     const profId = profSelect.value;
     const statusValues = Array.from(document.querySelectorAll('#status-dropdown-content input[type="checkbox"]:checked')).map(cb => cb.value);
@@ -74,8 +258,11 @@ async function carregarAgendamentos() {
     const endDate = endDateEl ? endDateEl.value : '';
 
     if (loading) loading.style.display = 'block';
-    if (error) error.style.display = 'none';
-    tabela.style.display = 'none';
+    if (errorBox) {
+        errorBox.style.display = 'none';
+        errorBox.textContent = '';
+    }
+    listaWrapper.style.display = 'none';
 
     try {
         let url = profId ? `/api/agendamentos_profissional/${profId}` : '/api/agendamentos_todos';
@@ -99,40 +286,26 @@ async function carregarAgendamentos() {
         const data = await response.json();
         agendamentosAtuais = data;
 
-        if (loading) loading.style.display = 'none';
-        tabela.style.display = 'table';
+    if (loading) loading.style.display = 'none';
+    listaWrapper.style.display = 'block';
 
         if (!Array.isArray(data) || data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:30px;color:#666;">Nenhum agendamento encontrado</td></tr>';
+            lista.innerHTML = '<div class="booking-card booking-card--empty" role="listitem">Nenhum agendamento encontrado para o filtro aplicado.</div>';
             return;
         }
 
-        tbody.innerHTML = '';
+        lista.innerHTML = '';
         data.forEach(ag => {
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td>${formatarData(ag.data_agendamento)}</td>
-                <td>${ag.hora_agendamento}</td>
-                <td>${ag.cliente_nome || 'Anônimo'}</td>
-                <td>${ag.cliente_telefone || '-'}</td>
-                <td>${ag.servicos_nomes ? ag.servicos_nomes.join(', ') : 'N/A'}</td>
-                <td>${ag.duracao_total} min</td>
-                <td>R$ ${parseFloat(ag.preco_total || 0).toFixed(2)}</td>
-                <td>${ag.status || '🟡Pendente'}</td>
-                <td>
-                    <button class="details-btn" onclick="mostrarDetalhes('${ag.id_agendamento}')">
-                        📋
-                    </button>
-                </td>
-            `;
-            tbody.appendChild(row);
+            const card = criarAgendamentoCard(ag);
+            card.setAttribute('role', 'listitem');
+            lista.appendChild(card);
         });
     } catch (error) {
         console.error('Erro ao carregar agendamentos:', error);
         if (loading) loading.style.display = 'none';
-        if (error) {
-            error.textContent = 'Erro ao carregar: ' + error.message;
-            error.style.display = 'block';
+        if (errorBox) {
+            errorBox.textContent = 'Erro ao carregar os agendamentos. Tente novamente em instantes.';
+            errorBox.style.display = 'flex';
         }
     }
 }
@@ -231,7 +404,11 @@ function initModalEvents() {
 // Funções para o dropdown de status
 function toggleStatusDropdown() {
     const content = document.getElementById('status-dropdown-content');
-    content.style.display = content.style.display === 'block' ? 'none' : 'block';
+    const button = document.getElementById('status-dropdown-btn');
+    if (!content || !button) return;
+    const isOpen = content.style.display === 'block';
+    content.style.display = isOpen ? 'none' : 'block';
+    button.setAttribute('aria-expanded', String(!isOpen));
 }
 
 function updateStatusFilter() {
@@ -242,6 +419,9 @@ function updateStatusFilter() {
     console.log('Status codificados:', encodedValues); // Depuração
     const btn = document.getElementById('status-dropdown-btn');
     btn.textContent = selectedValues.length > 0 ? selectedValues.join(', ') : 'Todos';
+    btn.setAttribute('aria-expanded', 'false');
+    const content = document.getElementById('status-dropdown-content');
+    if (content) content.style.display = 'none';
     carregarAgendamentos();
 }
 
@@ -249,6 +429,7 @@ function updateStatusFilter() {
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('DOM carregado, iniciando funções');
     try {
+        initBirthdayCapture();
         const isConsultaPage = !!document.getElementById('prof-select');
         if (isConsultaPage) {
             await carregarProfissionaisFiltro();
@@ -318,44 +499,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
-    // Modal Esqueceu Senha
-    function openForgotPasswordModal() {
-        console.log("Abrindo modal de esqueci senha");
-        const modal = document.getElementById('forgotPasswordModal');
-        if (modal) {
-            modal.style.display = 'flex';
-            const nomeField = document.getElementById('modal_nome');
-            const aniversarioField = document.getElementById('modal_aniversario');
-            const novaSenhaField = document.getElementById('nova_senha');
-            const novaSenhaGroup = document.getElementById('novaSenhaGroup');
-            const submitBtn = document.getElementById('submitBtn');
-            if (nomeField && aniversarioField) {
-                nomeField.value = '';
-                aniversarioField.value = '';
-            }
-            if (novaSenhaField) novaSenhaField.removeAttribute('required');
-            if (novaSenhaGroup) novaSenhaGroup.style.display = 'none';
-            if (submitBtn) submitBtn.textContent = 'Verificar';
-        } else {
-            console.error("Modal 'forgotPasswordModal' não encontrado");
-        }
-    }
-
-    function closeForgotPasswordModal() {
-        console.log("Fechando modal de esqueci senha");
-        const modal = document.getElementById('forgotPasswordModal');
-        if (modal) modal.style.display = 'none';
-        else console.error("Modal 'forgotPasswordModal' não encontrado");
-    }
-
-    window.addEventListener('click', function(event) {
-        const modal = document.getElementById('forgotPasswordModal');
-        if (modal && event.target === modal) {
-            console.log("Clicou fora do modal, fechando");
-            modal.style.display = 'none';
-        }
-    });
-
     // Efeitos Visuais
     document.querySelectorAll('input, textarea, select').forEach(input => {
         input.addEventListener('focus', function() {
@@ -381,108 +524,48 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
-    function resetButton(form, novaSenha = false) {
+    function resetButton(form) {
         const btn = form.querySelector('.btn');
         if (btn && btn.dataset.originalText) {
             console.log(`Restaurando botão do form: ${form.id || form.action}`);
             btn.innerHTML = btn.dataset.originalText;
             btn.disabled = false;
         } else if (btn) {
-            btn.innerHTML = novaSenha ? 'Redefinir Senha' : 'Verificar';
+            btn.innerHTML = 'Entrar / Cadastrar';
             btn.disabled = false;
         }
     }
 
     // Validação de Formulários
-    const forgotLink = document.getElementById('forgotPasswordLink');
-    if (forgotLink) {
-        forgotLink.addEventListener('click', function(e) {
-            e.preventDefault();
-            openForgotPasswordModal();
-        });
-    } else {
-        console.warn('Elemento forgotPasswordLink não encontrado, ignorando funcionalidade de esqueci senha.');
-    }
-
     const loginForm = document.querySelector('form[action="/login"]');
     if (loginForm) {
         applyLoadingEffect(loginForm);
         loginForm.addEventListener('submit', function(event) {
-            const nome = document.getElementById('nome')?.value.trim();
-            const senha = document.getElementById('senha')?.value;
+            const stage = this.querySelector('input[name="stage"]')?.value || 'phone';
+            if (stage !== 'phone') {
+                return;
+            }
+            const nomeInput = document.getElementById('nome');
+            const nome = nomeInput ? nomeInput.value.trim() : '';
+            const ddd = document.getElementById('ddd')?.value || '';
+            const telefone = document.getElementById('telefone')?.value || '';
+            const dddDigits = ddd.replace(/\D/g, '');
+            const telefoneDigits = telefone.replace(/\D/g, '');
             if (!nome) {
                 event.preventDefault();
                 console.error("Campo nome vazio");
                 alert('Por favor, preencha o campo Nome.');
                 resetButton(this);
-            } else if (senha.length < 6) {
+            } else if (dddDigits.length !== 2) {
                 event.preventDefault();
-                console.error("Senha menor que 6 dígitos");
-                alert('A senha deve ter pelo menos 6 dígitos.');
+                console.error("DDD inválido");
+                alert('Informe um DDD válido com 2 dígitos.');
                 resetButton(this);
-            }
-        });
-    }
-
-    const forgotPasswordForm = document.getElementById('forgotPasswordForm');
-    if (forgotPasswordForm) {
-        applyLoadingEffect(forgotPasswordForm);
-        forgotPasswordForm.addEventListener('submit', function(event) {
-            event.preventDefault();
-            const nomeField = document.getElementById('modal_nome');
-            const aniversarioField = document.getElementById('modal_aniversario');
-            const novaSenhaField = document.getElementById('nova_senha');
-            const novaSenhaGroup = document.getElementById('novaSenhaGroup');
-            const submitBtn = document.getElementById('submitBtn');
-
-            if (nomeField && aniversarioField && !novaSenhaField.value) {
-                if (!nomeField.value.trim()) {
-                    console.error("Campo nome vazio no modal");
-                    alert('Por favor, preencha o campo Nome.');
-                    resetButton(this);
-                    return;
-                }
-                if (!aniversarioField.value) {
-                    console.error("Campo aniversário vazio no modal");
-                    alert('Por favor, preencha a data de aniversário.');
-                    resetButton(this);
-                    return;
-                }
-                fetch('/esqueci_senha', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({
-                        'nome': nomeField.value.trim().toLowerCase(),
-                        'aniversario': aniversarioField.value
-                    })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        nomeField.readOnly = true;
-                        aniversarioField.readOnly = true;
-                        novaSenhaGroup.style.display = 'block';
-                        novaSenhaField.setAttribute('required', 'required');
-                        submitBtn.textContent = 'Redefinir Senha';
-                        resetButton(forgotPasswordForm);
-                    } else {
-                        console.error("Erro na validação:", data.error);
-                        alert(data.error || 'Erro ao validar os dados.');
-                        resetButton(forgotPasswordForm);
-                    }
-                })
-                .catch(error => {
-                    console.error("Erro na requisição /esqueci_senha:", error);
-                    alert('Erro na conexão com o servidor.');
-                    resetButton(forgotPasswordForm);
-                });
-            } else if (novaSenhaField && novaSenhaField.value.length < 6) {
+            } else if (telefoneDigits.length !== 9) {
                 event.preventDefault();
-                console.error("Nova senha muito curta");
-                alert('A nova senha deve ter pelo menos 6 dígitos.');
-                resetButton(this, true);
-            } else if (novaSenhaField) {
-                this.submit();
+                console.error("Telefone inválido");
+                alert('Informe um telefone válido com 9 dígitos.');
+                resetButton(this);
             }
         });
     }

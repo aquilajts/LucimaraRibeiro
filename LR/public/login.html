@@ -27,60 +27,38 @@
         <div class="alert success">{{ request.args.get('msg') }}</div>
         {% endif %}
 
-        {% if solicitar_aniversario %}
-        <form method="POST" action="/atualizar_aniversario" class="login-form">
-            <div class="form-group">
-                <label for="aniversario">Data de Aniversário:</label>
-                <input type="date" id="aniversario" name="aniversario" required>
-            </div>
-            <div class="form-group">
-                <label for="telefone">Telefone (WhatsApp):</label>
-                <input type="text" id="telefone" name="telefone" required>
-            </div>
-            <button type="submit" class="btn">Salvar e Continuar</button>
-        </form>
-
+        {% if birthday_step and pending_user %}
+        <div class="login-step login-step--birthday">
+            <p class="login-step__greeting">Olá, {{ pending_user.nome }}!</p>
+            <p class="login-step__details">Cadastro encontrado para o telefone ({{ pending_user.ddd }}) {{ pending_user.telefone }}. Para concluir, informe sua data de aniversário.</p>
+            <form method="POST" action="/login" class="login-form">
+                <input type="hidden" name="stage" value="birthday">
+                <div class="form-group">
+                    <label for="aniversario">Data de aniversário:</label>
+                    <input type="date" id="aniversario" name="aniversario" required max="{{ birthday_max }}">
+                </div>
+                <button type="submit" class="btn">Salvar e continuar</button>
+            </form>
+            <p class="login-step__restart"><a href="{{ url_for('logout') }}">Não é você? Começar novamente.</a></p>
+        </div>
         {% else %}
         <form method="POST" action="/login" class="login-form">
+            <input type="hidden" name="stage" value="phone">
             <div class="form-group">
                 <label for="nome">Nome:</label>
-                <input type="text" id="nome" name="nome" required autocomplete="username">
+                <input type="text" id="nome" name="nome" required autocomplete="name" value="{{ nome or '' }}">
             </div>
             <div class="form-group">
-                <label for="senha">Senha:</label>
-                <input type="password" id="senha" name="senha" required minlength="6" autocomplete="current-password">
+                <label for="ddd">DDD + Telefone:</label>
+                <div class="phone-fields">
+                    <input type="text" id="ddd" name="ddd" inputmode="numeric" pattern="\d{2}" maxlength="2" required value="{{ ddd or '27' }}">
+                    <input type="text" id="telefone" name="telefone" inputmode="numeric" pattern="\d{9}" minlength="9" maxlength="9" required autocomplete="tel" value="{{ telefone or '' }}">
+                </div>
             </div>
             <button type="submit" class="btn">Entrar / Cadastrar</button>
         </form>
-
-        <div class="forgot-password">
-            <a href="#" id="forgotPasswordLink">Esqueci minha senha</a>
-        </div>
         {% endif %}
     </main>
-
-    <!-- Modal -->
-    <div id="forgotPasswordModal" class="modal">
-        <div class="modal-content">
-            <span class="close" onclick="closeForgotPasswordModal()">&times;</span>
-            <h2>Recuperar Senha</h2>
-            <form id="forgotPasswordForm" method="POST" action="/esqueci_senha">
-                <div class="form-group">
-                    <label for="modal_nome">Nome:</label>
-                    <input type="text" id="modal_nome" name="nome" required>
-                </div>
-                <div class="form-group">
-                    <label for="modal_aniversario">Data de Aniversário:</label>
-                    <input type="date" id="modal_aniversario" name="aniversario" required>
-                </div>
-                <div id="novaSenhaGroup" class="form-group" style="display: none;">
-                    <label for="nova_senha">Nova Senha (mínimo 6 dígitos):</label>
-                    <input type="password" id="nova_senha" name="nova_senha" minlength="6" autocomplete="new-password">
-                </div>
-                <button type="submit" id="submitBtn" class="btn">Verificar</button>
-            </form>
-        </div>
-    </div>
 
     <!-- Carrossel -->
     <div class="carousel">
