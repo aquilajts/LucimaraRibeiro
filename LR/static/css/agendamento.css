@@ -1,0 +1,162 @@
+/* =========================
+   AGENDAMENTO
+========================= */
+.categoria-group {
+    margin-bottom: 20px;
+}
+
+#add-categoria {
+    margin-bottom: 20px;
+    background-color: #ad1457;
+    color: #fff;
+    border: none;
+    padding: 10px;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+#add-categoria:hover {
+    background-color: #d81b60;
+}
+
+.servicos-checkboxes {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 10px;
+}
+
+.servicos-checkboxes label {
+    display: block;
+    margin-bottom: 5px;
+}
+
+#servicos-checkboxes {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 10px;
+}
+
+.servico-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    transition: background-color 0.2s ease;
+}
+
+.servico-item:hover {
+    background-color: rgba(255, 255, 255, 0.12);
+}
+
+.servico-item .servico-checkbox {
+    flex: 0 0 auto;
+    margin-right: 6px;
+    width: auto;
+    display: inline-block;
+}
+
+.servico-item .servico-nome {
+    flex: 1 1 auto;
+}
+
+.servico-item .servico-preco {
+    flex: 0 0 auto;
+    font-weight: 600;
+    margin-left: auto;
+    white-space: nowrap;
+}
+
+#servicos-por-categoria-container {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.btn-secondary {
+    display: inline-block;
+    padding: 10px 16px;
+    border-radius: 8px;
+    border: none;
+    background-color: #ad1457;
+    color: #fff;
+    cursor: pointer;
+    transition: transform 0.2s ease, background-color 0.2s ease;
+}
+
+.btn-secondary:hover {
+    transform: scale(1.03);
+    background-color: #d81b60;
+}
+
+select[multiple] {
+    height: 150px;
+}
+
+#calendar {
+    max-width: 100%;
+    min-height: 350px;
+    height: auto;
+    margin: 0 auto;
+}
+
+.fc-daygrid-day-number {
+    color: #333;
+    font-weight: bold;
+}
+
+.fc-event {
+    background-color: #d81b60;
+    border: none;
+    color: #fff;
+    cursor: pointer;
+}
+
+.fc-day-past,
+.fc-day-disabled {
+    background-color: #ffe5e5 !important;
+    color: #8a1c1c !important;
+    opacity: 1;
+}
+
+.fc-day-blocked {
+    background-color: #ffcdd2 !important;
+    color: #8a1c1c !important;
+    cursor: not-allowed;
+}
+
+.fc-day-loading {
+    background-color: #fff7e6 !important;
+}
+
+.fc-day-future:not(.fc-day-disabled) {
+    background-color: #ffffff;
+}
+
+.fc-day-selected {
+    background-color: #c8f7c5 !important;
+    box-shadow: inset 0 0 0 2px #2e7d32;
+}
+
+.fc-day-available {
+    background-color: #f2fff2 !important;
+}
+
+.fc-day-unavailable {
+    background-color: #ffe8e8 !important;
+    color: #8a1c1c !important;
+    cursor: not-allowed;
+}
+
+#calendar .fc-daygrid-day,
+#calendar .fc-scrollgrid-sync-table {
+    border-radius: 6px;
+}
+
+#calendar .fc-toolbar-title {
+    color: #333;
+}

@@ -14,6 +14,15 @@ const STATUS_META = {
     "⚫Pago": { tone: "neutral", label: "Pago" }
 };
 
+const STATUS_OPTIONS = [
+    "🔴Desistência",
+    "🔴Não veio",
+    "🟡Pendente",
+    "🟢Atendido",
+    "🔵Agendado",
+    "⚫Pago"
+];
+
 const HTML_ESCAPE_MAP = {
     "&": "&amp;",
     "<": "&lt;",
@@ -127,19 +136,37 @@ function formatarData(dataStr) {
 
 function criarAgendamentoCard(ag) {
     const card = document.createElement('article');
-    card.className = 'booking-card booking-card--open';
+    card.className = 'booking-card';
 
-    const telefone = ag.cliente_telefone ? escapeHtml(ag.cliente_telefone) : '—';
+    const telefoneRaw = ag.cliente_telefone ? String(ag.cliente_telefone) : '';
+    const telefoneDigits = telefoneRaw.replace(/\D/g, '');
+    const telefone = telefoneDigits ? escapeHtml(telefoneRaw) : '—';
+    const whatsappHref = telefoneDigits ? `https://wa.me/55${telefoneDigits}` : '';
     const servicosLista = Array.isArray(ag.servicos_nomes) && ag.servicos_nomes.length
         ? ag.servicos_nomes.map(escapeHtml).join(', ')
         : 'N/A';
     const precoNumero = Number(ag.preco_total ?? ag.preco ?? 0);
     const precoFormatado = Number.isFinite(precoNumero) ? precoNumero.toFixed(2) : '0.00';
-    const statusChip = buildStatusChip(ag.status);
+    const currentStatus = ag.status || '🟡Pendente';
+    const statusChip = buildStatusChip(currentStatus);
+    const statusSelectId = `status-${escapeHtml(String(ag.id_agendamento))}`;
+    const statusChoices = STATUS_OPTIONS.includes(currentStatus)
+        ? STATUS_OPTIONS.slice()
+        : [...STATUS_OPTIONS, currentStatus];
+    const statusOptionsHtml = statusChoices
+        .map(statusValue => {
+            const escaped = escapeHtml(statusValue);
+            const selectedAttr = statusValue === currentStatus ? ' selected' : '';
+            return `<option value="${escaped}"${selectedAttr}>${escaped}</option>`;
+        })
+        .join('');
+    const telefoneHtml = telefoneDigits
+        ? `${telefone} <a class="booking-card__phone-link" href="${whatsappHref}" target="_blank" rel="noopener" aria-label="Conversar pelo WhatsApp com ${escapeHtml(ag.cliente_nome || 'cliente')}">📱</a>`
+        : telefone;
 
     card.innerHTML = `
         <div class="booking-card__header">
-            <button class="booking-card__toggle" type="button" aria-expanded="true">
+            <button class="booking-card__toggle" type="button" aria-expanded="false">
                 <div class="booking-card__summary">
                     <div class="booking-card__summary-main">
                         <span class="booking-card__date">${escapeHtml(formatarData(ag.data_agendamento))}</span>
@@ -147,7 +174,7 @@ function criarAgendamentoCard(ag) {
                     </div>
                     <div class="booking-card__summary-side">
                         <span class="booking-card__client">${escapeHtml(ag.cliente_nome || 'Cliente não identificado')}</span>
-                        ${statusChip}
+                        <span class="booking-card__summary-status">${statusChip}</span>
                     </div>
                 </div>
                 <span class="booking-card__chevron" aria-hidden="true"></span>
@@ -156,20 +183,14 @@ function criarAgendamentoCard(ag) {
         </div>
         <div class="booking-card__details">
             <dl class="booking-card__meta">
-                <div><dt>Telefone</dt><dd>${telefone}</dd></div>
+                <div><dt>Telefone</dt><dd>${telefoneHtml}</dd></div>
                 <div><dt>Duração total</dt><dd>${escapeHtml(String(ag.duracao_total || 0))} min</dd></div>
                 <div><dt>Preço</dt><dd>R$ ${precoFormatado}</dd></div>
-                <div><dt>Status</dt><dd>${statusChip}</dd></div>
+                <div><dt>Status</dt><dd><div class="booking-card__status-control"><select id="${statusSelectId}" class="booking-card__status-select">${statusOptionsHtml}</select></div></dd></div>
             </dl>
             <div class="booking-card__services">
                 <strong>Serviços</strong>
                 <p>${servicosLista}</p>
-            </div>
-            <div class="booking-card__footer">
-                <div class="booking-card__totals">
-                    <span>${escapeHtml(formatarData(ag.data_agendamento))} · ${escapeHtml(ag.hora_agendamento || '—')}</span>
-                    <span>R$ ${precoFormatado}</span>
-                </div>
             </div>
         </div>
     `;
@@ -177,11 +198,16 @@ function criarAgendamentoCard(ag) {
     const toggleBtn = card.querySelector('.booking-card__toggle');
     const details = card.querySelector('.booking-card__details');
     const manageBtn = card.querySelector('.booking-card__manage-btn');
+    const statusSelect = card.querySelector('.booking-card__status-select');
+    const summaryStatusWrapper = card.querySelector('.booking-card__summary-status');
+    let currentStatusValue = currentStatus;
 
     if (toggleBtn && details) {
+        details.hidden = true;
         toggleBtn.addEventListener('click', () => {
             const isOpen = card.classList.toggle('booking-card--open');
             toggleBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+            details.hidden = !isOpen;
         });
     }
 
@@ -189,6 +215,50 @@ function criarAgendamentoCard(ag) {
         manageBtn.addEventListener('click', () => {
             agendamentoIdAtual = ag.id_agendamento;
             mostrarDetalhes(String(ag.id_agendamento));
+        });
+    }
+
+    if (statusSelect) {
+        statusSelect.addEventListener('change', async (event) => {
+            const newStatus = event.target.value;
+            if (!newStatus || newStatus === currentStatusValue) {
+                return;
+            }
+
+            statusSelect.disabled = true;
+            statusSelect.classList.add('booking-card__status-select--loading');
+
+            try {
+                const response = await fetch(`/api/agendamento/${ag.id_agendamento}/status`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: newStatus })
+                });
+                let result = {};
+                try {
+                    result = await response.json();
+                } catch (parseError) {
+                    console.error('Erro ao interpretar resposta da atualização de status:', parseError);
+                }
+                if (!response.ok || !result.success) {
+                    throw new Error(result.error || 'Não foi possível atualizar o status.');
+                }
+                currentStatusValue = newStatus;
+                if (summaryStatusWrapper) {
+                    summaryStatusWrapper.innerHTML = buildStatusChip(newStatus);
+                }
+                const alvo = agendamentosAtuais.find(item => String(item.id_agendamento) === String(ag.id_agendamento));
+                if (alvo) {
+                    alvo.status = newStatus;
+                }
+            } catch (error) {
+                console.error('Erro ao atualizar status:', error);
+                alert(error.message || 'Erro ao atualizar status.');
+                statusSelect.value = currentStatusValue;
+            } finally {
+                statusSelect.disabled = false;
+                statusSelect.classList.remove('booking-card__status-select--loading');
+            }
         });
     }
 
