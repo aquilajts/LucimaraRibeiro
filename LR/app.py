@@ -1,4 +1,18 @@
 
+"""Aplicação Flask do Estúdio de Nail Designer.
+
+Organização geral deste arquivo:
+1) Imports e configuração de ambiente
+2) Configuração do app, logging e cliente Supabase
+3) Constantes, cache e utilitários
+4) Rotas de páginas (HTML)
+5) APIs (organizadas por domínio) com anotações de uso no frontend
+6) Ponto de entrada
+
+Observação: cada rota de API possui docstring com a indicação de onde é usada
+(arquivo HTML e/ou JS em `public/` e `static/js/`).
+"""
+
 from flask import Flask, render_template, request, redirect, session, url_for, jsonify
 import logging
 from supabase import create_client, Client
@@ -7,7 +21,7 @@ from datetime import datetime, timedelta, time
 import os
 import zoneinfo
 import math
-import time as time_module
+import time as time_module  # corrigido alias para uso consistente abaixo
 import re
 from dotenv import load_dotenv
 from pathlib import Path
@@ -16,7 +30,9 @@ dotenv_path = Path(__file__).parent / "supa.env"
 print("Carregando .env de:", dotenv_path)
 load_dotenv(dotenv_path=dotenv_path)
 
+# ================================
 # Configuração de logging
+# ================================
 logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s [%(levelname)s] %(message)s',
@@ -25,9 +41,6 @@ logging.basicConfig(
         logging.FileHandler('app.log')
     ]
 )
-
-# Configuração de logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(
@@ -174,7 +187,9 @@ def get_profissional_config(id_profissional):
         return config
     return None
 
+# ================================
 # Funções Auxiliares
+# ================================
 def usuario_logado():
     logger.debug("Verificando se usuário está logado: %s", "user" in session)
     return "user" in session
@@ -184,18 +199,32 @@ def get_user():
     logger.debug("Obtendo usuário da sessão: %s", user)
     return user
 
-# APAGAR DEPOIS ----
-print(f"URL: {os.getenv('SUPABASE_URL')}, Key: {os.getenv('SUPABASE_KEY')}")
-# APAGAR DEPOIS ----
+# Log de depuração sem expor a chave inteira
+if url and key:
+    masked_key = key[:6] + "..." + key[-4:] if len(key) > 10 else "***"
+    logger.debug("Supabase configurado - URL: %s | KEY: %s", url, masked_key)
 
-# Rotas existentes
+# ================================
+# Rotas de Páginas (HTML)
+# ================================
 @app.route("/")
 def index():
+    """Página inicial.
+
+    Frontend: public/index.html
+    JS relacionado: static/js/index.js
+    """
     logger.info("Acessando rota /index")
     return render_template("index.html", user=get_user())
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
+    """Tela de login com duas etapas (telefone e aniversário).
+
+    Frontend: public/login.html
+    JS relacionado: static/js/login.js
+    Usada antes de acessar o fluxo de agendamento.
+    """
     logger.info("Acessando rota /login, método: %s", request.method)
     erro = None
     stage = "phone"
@@ -392,6 +421,10 @@ def login():
 
 @app.route("/logout")
 def logout():
+    """Finaliza sessão do usuário.
+
+    Frontend: acionado via UI do site (public/base.html se existir) ou botões.
+    """
     logger.info("Acessando rota /logout")
     session.clear()
     logger.info("Usuário deslogado")
@@ -399,6 +432,12 @@ def logout():
 
 @app.route("/agendamento")
 def agendamento():
+    """Página de agendamento (formulário principal).
+
+    Frontend: public/agendamento.html
+    JS relacionado: static/js/agendamento.js
+    As APIs consumidas pela página estão documentadas abaixo.
+    """
     logger.info("Acessando rota /agendamento")
     if not usuario_logado():
         logger.error("Acesso não autorizado a /agendamento")
@@ -407,9 +446,16 @@ def agendamento():
     logger.debug("Renderizando agendamento.html com min_date: %s", min_date)
     return render_template("agendamento.html", user=get_user(), min_date=min_date)
 
-# API: Calcular total de serviços (apenas preço no frontend, duração armazenada no backend)
+# ================================
+# APIs - Serviços, Categorias e Totais
+# ================================
 @app.route("/api/calcular_total", methods=["POST"])
 def api_calcular_total():
+    """Calcula o preço total dos serviços selecionados.
+
+    Usada em: public/agendamento.html
+    JS: static/js/agendamento.js (cálculo de preço em tempo real)
+    """
     logger.info("Acessando API /api/calcular_total")
     data = request.json
     id_servicos = data.get('id_servicos', [])
@@ -445,9 +491,14 @@ def api_calcular_total():
         return jsonify({"success": False, "error": "Erro ao calcular totais"}), 500
     
 
-# API: Listar categorias disttintas
+# API: Listar categorias distintas
 @app.route("/api/categorias")
 def api_categorias():
+    """Retorna categorias de serviços ativas.
+
+    Usada em: public/agendamento.html
+    JS: static/js/agendamento.js (popular seleção de categorias)
+    """
     logger.info("Acessando API /api/categorias")
     if supabase:
         try:
@@ -465,10 +516,11 @@ def api_categorias():
 # API: Listar serviços por categoria
 @app.route("/api/servicos")
 def api_servicos():
-    """Lista serviços, opcionalmente filtrando por categoria, retornando dados completos.
+    """Lista serviços (opcionalmente por categoria) com dados completos.
 
-    Query params:
-    - categoria: string (opcional)
+    Usada em: public/agendamento.html
+    JS: static/js/agendamento.js
+    Query params: categoria (opcional)
     """
     if not supabase:
         return jsonify([])
@@ -486,7 +538,12 @@ def api_servicos():
 
 @app.route("/api/agendamento/opcoes")
 def api_agendamento_opcoes():
-    """Retorna dados agregados para o formulário de agendamento (categorias, serviços e profissionais)."""
+    """Retorna dados agregados para o formulário de agendamento.
+
+    Conteúdo: categorias, serviços e profissionais.
+    Usada em: public/agendamento.html
+    JS: static/js/agendamento.js (carga inicial)
+    """
     logger.info("Acessando API /api/agendamento/opcoes")
     if not supabase:
         logger.error("Supabase não inicializado em /api/agendamento/opcoes")
@@ -581,17 +638,21 @@ def api_agendamento_opcoes():
 
 @app.route("/api/profissionais")
 def api_listar_profissionais():
-    """Lista todos os profissionais ativos"""
+    """Lista todos os profissionais ativos.
+
+    Usada em: public/agendamento.html e public/profissional_agendamentos.html
+    JS: static/js/agendamento.js, static/js/profissional_agendamentos.js
+    """
     if not supabase:
         return jsonify([])
-    
+
     try:
-        response = supabase.table("profissionais")\
-            .select("id_profissional, nome")\
-            .eq("ativo", True)\
-            .order("nome")\
+        response = supabase.table("profissionais") \
+            .select("id_profissional, nome") \
+            .eq("ativo", True) \
+            .order("nome") \
             .execute()
-        
+
         return jsonify(response.data or [])
     except Exception as e:
         logger.error("Erro API profissionais: %s", str(e))
@@ -600,6 +661,11 @@ def api_listar_profissionais():
 # API: Profissionais por serviço
 @app.route("/api/profissionais/<int:id_servico>")
 def api_profissionais(id_servico):
+    """Profissionais habilitados para um serviço específico.
+
+    Usada em: public/agendamento.html
+    JS: static/js/agendamento.js (ao escolher um serviço)
+    """
     logger.info("Acessando API /api/profissionais/%s", id_servico)
     if supabase:
         try:
@@ -647,6 +713,11 @@ def api_profissionais(id_servico):
 # API: Horários disponíveis
 @app.route("/api/horarios_disponiveis/<int:id_profissional>/<data>", methods=["POST"])
 def api_horarios_disponiveis(id_profissional, data):
+    """Calcula horários disponíveis para concluir os serviços selecionados.
+
+    Usada em: public/agendamento.html
+    JS: static/js/agendamento.js (listagem de horários)
+    """
     logger.info("Acessando API /api/horarios_disponiveis/%s/%s", id_profissional, data)
     data_post = request.json
     id_servicos = data_post.get('id_servicos', [])
@@ -770,6 +841,11 @@ def api_horarios_disponiveis(id_profissional, data):
 # API: Salvar agendamento
 @app.route("/api/agendar", methods=["POST"])
 def api_agendar():
+    """Salva um novo agendamento do cliente autenticado.
+
+    Usada em: public/agendamento.html
+    JS: static/js/agendamento.js (envio do formulário)
+    """
     logger.info("Acessando API /api/agendar")
     if not usuario_logado():
         logger.error("Usuário não autenticado")
@@ -852,6 +928,11 @@ def api_agendar():
 # API: Detalhes do profissional (para dias de trabalho)
 @app.route("/api/profissional/<int:id_profissional>")
 def api_profissional(id_profissional):
+    """Retorna configuração de um profissional (dias e horários).
+
+    Usada em: public/agendamento.html
+    JS: static/js/agendamento.js (validação do dia)
+    """
     logger.info("Acessando API /api/profissional/%s", id_profissional)
     if supabase:
         try:
@@ -867,12 +948,23 @@ def api_profissional(id_profissional):
 # ROTA DA PÁGINA HTML
 @app.route("/profissional_agendamentos")
 def profissional_agendamentos():
+    """Página de agenda do profissional.
+
+    Frontend: public/profissional_agendamentos.html
+    JS: static/js/profissional_agendamentos.js
+    """
     logger.info("Acessando /profissional_agendamentos")
     return render_template("profissional_agendamentos.html")
 
 # ROTA DA API (COM parâmetro obrigatório)
 @app.route("/api/agendamentos_profissional/<int:id_profissional>")
 def api_agendamentos_profissional(id_profissional):
+    """Lista agendamentos de um profissional (com filtros).
+
+    Usada em: public/profissional_agendamentos.html
+    JS: static/js/profissional_agendamentos.js
+    Query params opcionais: status (múltiplos), start_date, end_date
+    """
     logger.info("API AGENDAMENTOS - ID: %s", id_profissional)
     
     if not supabase:
@@ -936,7 +1028,10 @@ def api_agendamentos_profissional(id_profissional):
 
 @app.route("/api/agendamentos_todos")
 def api_agendamentos_todos():
-    """Todos os agendamentos"""
+    """Lista todos os agendamentos (painel/relatórios).
+
+    Usada potencialmente por páginas administrativas.
+    """
     if not supabase:
         return jsonify([])
     
@@ -996,6 +1091,10 @@ def api_agendamentos_todos():
 
 @app.route("/api/agendamento/<id_agendamento>")
 def get_agendamento_detalhes(id_agendamento):
+    """Detalhes completos de um agendamento específico.
+
+    Usada em: public/profissional_agendamentos.html (modal/detalhe).
+    """
     try:
         # 1. Buscar agendamento
         ag_resp = supabase.table("agendamentos")\
@@ -1060,31 +1159,15 @@ def get_agendamento_detalhes(id_agendamento):
         logger.error(f"Erro detalhes {id_agendamento}: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-@app.route("/api/profissionais")
-def api_profissionais_list():
-    """Lista profissionais para filtro"""
-    if not supabase:
-        return jsonify([])
-    
-    try:
-        # Buscar profissionais ativos
-        pros = supabase.table("profissionais")\
-            .select("id_profissional, nome")\
-            .eq("ativo", True)\
-            .order("nome")\
-            .execute()
-        
-        if pros.error:
-            logger.error("Erro profissionais: %s", pros.error)
-            return jsonify([])
-        
-        return jsonify(pros.data or [])
-    except Exception as e:
-        logger.error("Erro API prof: %s", str(e))
-        return jsonify([{"id_profissional": 1, "nome": "Profissional Padrão"}])
+# (rota duplicada '/api/profissionais' removida; utilizar api_listar_profissionais)
 
 @app.route("/api/agendamento/<id>", methods=["GET", "PUT"])
 def api_agendamento(id):
+    """GET: detalhes resumidos; PUT: atualizar dados do agendamento.
+
+    Usada em: public/profissional_agendamentos.html
+    JS: static/js/profissional_agendamentos.js
+    """
     if request.method == "GET":
         try:
             ag_resp = supabase.table("agendamentos")\
@@ -1204,6 +1287,11 @@ def api_agendamento(id):
 
 @app.route("/api/agendamento/<id>/status", methods=["PATCH"])
 def api_agendamento_status(id):
+    """Atualiza apenas o status do agendamento (PATCH).
+
+    Usada em: public/profissional_agendamentos.html
+    JS: static/js/profissional_agendamentos.js
+    """
     logger.info("Atualizando status do agendamento %s", id)
     if not supabase:
         logger.error("Supabase não inicializado em PATCH de status")
@@ -1239,9 +1327,12 @@ def api_agendamento_status(id):
         logger.error("Erro ao atualizar status do agendamento %s: %s", ag_id, str(exc))
         return jsonify({"success": False, "error": "Erro ao atualizar status"}), 500
 
-# Certifique-se de que o bloco acima está fechado antes da próxima rota
 @app.route("/api/teste/<int:id_profissional>")
 def teste_api(id_profissional):
+    """Endpoint de teste e verificação rápida do backend.
+
+    Pode ser chamado manualmente para verificar conectividade com Supabase.
+    """
     return jsonify({
         "message": "API funcionando",
         "id_profissional": id_profissional,
@@ -1250,6 +1341,10 @@ def teste_api(id_profissional):
 
 @app.route("/api/status")
 def api_status():
+    """Lista valores de status existentes em agendamentos.
+
+    Útil para popular filtros no frontend.
+    """
     logger.info("Acessando API /api/status")
     if not supabase:
         logger.error("Supabase não inicializado")
@@ -1268,6 +1363,9 @@ def api_status():
         return jsonify([]), 500
 
 if __name__ == "__main__":
+    # ================================
+    # Ponto de entrada
+    # ================================
     port = int(os.environ.get("PORT", 8080))
     logger.info("Iniciando servidor na porta %s", port)
     app.run(host="0.0.0.0", port=port, debug=True)
