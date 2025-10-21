@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Acesso do cliente</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}" />
+  <style>
+    .cliente-menu { max-width: 720px; margin: 60px auto; padding: 40px 24px; border-radius: 14px; background: rgba(255, 255, 255, 0.12); text-align: center; }
+    .cliente-menu h1 { font-size: clamp(26px, 6vw, 34px); margin-bottom: 16px; }
+    .cliente-menu p { font-size: 15px; opacity: 0.8; margin-bottom: 28px; }
+    .cliente-links { display: flex; flex-direction: column; gap: 14px; }
+    .cliente-link { border-radius: 12px; padding: 14px 18px; background: rgba(255, 255, 255, 0.15); font-weight: 600; text-decoration: none; color: inherit; transition: transform 0.2s ease, background 0.2s ease; }
+    .cliente-link:hover { background: rgba(255, 255, 255, 0.28); transform: translateY(-2px); }
+  </style>
+</head>
+<body>
+  <main class="cliente-menu">
+    <h1>Acesso do cliente</h1>
+    <p>Escolha uma opção para continuar.</p>
+    <nav class="cliente-links">
+      <a class="cliente-link" href="{{ url_for('agendamento') }}">Agendamento</a>
+      <a class="cliente-link" href="{{ url_for('cliente_meus_agendamentos') }}">Meus agendamentos</a>
+      <a class="cliente-link" href="{{ url_for('cliente_perfil') }}">Perfil</a>
+    </nav>
+  </main>
+</body>
+</html>

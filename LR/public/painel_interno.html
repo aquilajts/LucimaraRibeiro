@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Painel interno</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}" />
+  <style>
+    .panel { max-width: 960px; margin: 20px auto 60px; }
+    .panel-header { background: linear-gradient(135deg, rgba(51,51,51,.92), rgba(51,51,51,.85)); color:#fff; padding: 22px; border-radius: 16px; margin-bottom: 18px; }
+    .panel-header h1 { font-size: clamp(24px, 6vw, 32px); margin: 4px 0 6px; }
+    .panel-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap: 12px; }
+    .tile { background: rgba(255,255,255,.15); color:#fff; padding: 18px; border-radius: 14px; text-align: center; font-weight: 700; border: none; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; min-height: 72px; }
+    .tile:active { transform: scale(0.99); }
+    .toolbar { display:flex; justify-content:flex-end; margin: 8px 0 18px; }
+    .logout { background: rgba(255, 255, 255, 0.12); color: #fff; padding: 10px 16px; border-radius: 10px; font-weight: 600; text-decoration: none; }
+    @media (max-width: 480px) { .panel { margin: 12px; } }
+  </style>
+</head>
+<body>
+  <main class="panel">
+    <div class="panel-header">
+      <div class="toolbar"><a class="logout" href="/painel/logout">Sair</a></div>
+      <p style="letter-spacing:.12em; text-transform:uppercase; opacity:.75; font-size:13px;">Painel interno</p>
+      <h1>📋 Painel interno</h1>
+      <p style="opacity:.9">Atalhos rápidos para o dia a dia.</p>
+    </div>
+
+    <section class="panel-actions">
+      <a class="tile" href="{{ url_for('agenda_page') }}">Agenda</a>
+      <a class="tile" href="{{ url_for('painel_funcionario') }}">Funcionário</a>
+      <a class="tile" href="{{ url_for('painel_servicos') }}">Serviços</a>
+      <a class="tile" href="{{ url_for('painel_relatorios') }}">Relatórios</a>
+      <a class="tile" href="{{ url_for('painel_usuarios') }}">Clientes</a>
+    </section>
+  </main>
+</body>
+</html>

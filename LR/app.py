@@ -13,7 +13,7 @@ Observação: cada rota de API possui docstring com a indicação de onde é usa
 (arquivo HTML e/ou JS em `public/` e `static/js/`).
 """
 
-from flask import Flask, render_template, request, redirect, session, url_for, jsonify
+from flask import Flask, render_template, request, redirect, session, url_for, jsonify, make_response
 import logging
 from supabase import create_client, Client
 from collections import defaultdict
@@ -25,6 +25,8 @@ import time as time_module  # corrigido alias para uso consistente abaixo
 import re
 from dotenv import load_dotenv
 from pathlib import Path
+from functools import wraps
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 dotenv_path = Path(__file__).parent / "supa.env"
 print("Carregando .env de:", dotenv_path)
@@ -49,6 +51,8 @@ app = Flask(
     static_folder="static"
 )
 app.secret_key = os.getenv('SECRET_KEY', 'nail_designer_lucimara_2025')
+# Sessão do painel interno deve durar 24 horas
+app.permanent_session_lifetime = timedelta(hours=24)
 
 # Config Supabase
 url = os.getenv("SUPABASE_URL")
@@ -89,6 +93,9 @@ ALLOWED_STATUS = {
     "🔵Agendado",
     "⚫Pago",
 }
+
+PAINEL_COOKIE_NAME = "painel_device_token"
+PAINEL_COOKIE_MAX_AGE = int(timedelta(hours=24).total_seconds())
 
 
 def _cache_get(cache, key):
@@ -199,6 +206,62 @@ def get_user():
     logger.debug("Obtendo usuário da sessão: %s", user)
     return user
 
+
+def _build_painel_session(user: str) -> None:
+    session.permanent = True
+    session["painel_interno_ok"] = True
+    session["painel_user"] = user
+
+
+def _get_painel_serializer() -> URLSafeTimedSerializer:
+    secret = app.secret_key
+    if not secret:
+        raise RuntimeError("SECRET_KEY não configurada para o painel interno")
+    return URLSafeTimedSerializer(secret_key=secret, salt="painel-device-token")
+
+
+def _generate_painel_token(user: str) -> str:
+    serializer = _get_painel_serializer()
+    return serializer.dumps({"user": user})
+
+
+def restore_painel_session_from_cookie() -> bool:
+    token = request.cookies.get(PAINEL_COOKIE_NAME)
+    if not token:
+        return False
+    serializer = _get_painel_serializer()
+    try:
+        payload = serializer.loads(token, max_age=PAINEL_COOKIE_MAX_AGE)
+    except SignatureExpired:
+        return False
+    except BadSignature:
+        return False
+
+    user = payload.get("user")
+    if user != "LucimaraR":
+        return False
+
+    _build_painel_session(user)
+    return True
+
+
+# ================================
+# Autorização do Painel interno
+# ================================
+def painel_autenticado() -> bool:
+    if session.get("painel_interno_ok"):
+        return True
+    return restore_painel_session_from_cookie()
+
+
+def require_painel(view_func):
+    @wraps(view_func)
+    def _wrapped(*args, **kwargs):
+        if not painel_autenticado():
+            return redirect(url_for("painel_login"))
+        return view_func(*args, **kwargs)
+    return _wrapped
+
 # Log de depuração sem expor a chave inteira
 if url and key:
     masked_key = key[:6] + "..." + key[-4:] if len(key) > 10 else "***"
@@ -216,6 +279,117 @@ def index():
     """
     logger.info("Acessando rota /index")
     return render_template("index.html", user=get_user())
+
+# ================================
+# Painel interno (login simples e dashboard)
+# ================================
+
+@app.route("/painel/login", methods=["GET", "POST"])
+def painel_login():
+    """Tela de login do Painel interno.
+
+    Credenciais fixas solicitadas: Nome=LucimaraR, Senha=123132.
+    Mobile-first com base no base.css.
+    """
+    if painel_autenticado():
+        return redirect(url_for("painel_interno"))
+
+    erro = None
+    if request.method == "POST":
+        nome = (request.form.get("nome") or "").strip()
+        senha = (request.form.get("senha") or "").strip()
+        if nome == "LucimaraR" and senha == "123132":
+            _build_painel_session(nome)
+            token = _generate_painel_token(nome)
+            response = make_response(redirect(url_for("painel_interno")))
+            response.set_cookie(
+                PAINEL_COOKIE_NAME,
+                token,
+                max_age=PAINEL_COOKIE_MAX_AGE,
+                httponly=True,
+                samesite="Lax",
+                secure=request.is_secure,
+            )
+            return response
+        erro = "Credenciais inválidas"
+    response = make_response(render_template("painel_login.html", erro=erro))
+    if not session.get("painel_interno_ok") and request.cookies.get(PAINEL_COOKIE_NAME):
+        response.delete_cookie(PAINEL_COOKIE_NAME)
+    return response
+
+
+@app.route("/painel")
+def painel_interno():
+    """Dashboard do Painel interno com 5 botões.
+
+    - Agenda: encaminha para a tela de consulta de agendamentos.
+    - Botão 1, 2, 3, 4: placeholders para futuras funcionalidades.
+    """
+    if not painel_autenticado():
+        return redirect(url_for("painel_login"))
+    return render_template("painel_interno.html")
+
+
+@app.route("/painel/logout")
+def painel_logout():
+    """Sai apenas do Painel interno (não mexe no login de cliente)."""
+    session.pop("painel_interno_ok", None)
+    session.pop("painel_user", None)
+    response = make_response(redirect(url_for("index")))
+    response.delete_cookie(PAINEL_COOKIE_NAME)
+    return response
+
+
+@app.route("/agenda")
+@require_painel
+def agenda_page():
+    """Página 'Agenda' (antiga profissional_agendamentos), protegida pelo Painel interno."""
+    return render_template("agenda.html")
+
+
+@app.route("/painel/funcionario")
+@require_painel
+def painel_funcionario():
+    return render_template("funcionario.html")
+
+
+@app.route("/painel/servicos")
+@require_painel
+def painel_servicos():
+    return render_template("servicos.html")
+
+
+@app.route("/painel/relatorios")
+@require_painel
+def painel_relatorios():
+    return render_template("relatorios.html")
+
+
+@app.route("/painel/clientes")
+@require_painel
+def painel_usuarios():
+    return render_template("usuarios.html")
+
+
+@app.route("/cliente")
+def cliente_home():
+    if not usuario_logado():
+        return redirect(url_for("login"))
+    return render_template("cliente.html", user=get_user())
+
+
+@app.route("/cliente/meus-agendamentos")
+def cliente_meus_agendamentos():
+    if not usuario_logado():
+        return redirect(url_for("login"))
+    return render_template("meusagendamentos.html", user=get_user())
+
+
+@app.route("/cliente/perfil")
+def cliente_perfil():
+    if not usuario_logado():
+        return redirect(url_for("login"))
+    return render_template("perfil.html", user=get_user())
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -640,8 +814,8 @@ def api_agendamento_opcoes():
 def api_listar_profissionais():
     """Lista todos os profissionais ativos.
 
-    Usada em: public/agendamento.html e public/profissional_agendamentos.html
-    JS: static/js/agendamento.js, static/js/profissional_agendamentos.js
+    Usada em: public/agendamento.html e public/agenda.html
+    JS: static/js/agendamento.js, static/js/agenda.js
     """
     if not supabase:
         return jsonify([])
@@ -946,23 +1120,23 @@ def api_profissional(id_profissional):
     return jsonify({"error": "Supabase não inicializado"}), 500
 
 # ROTA DA PÁGINA HTML
-@app.route("/profissional_agendamentos")
-def profissional_agendamentos():
+@app.route("/agenda")
+def agenda():
     """Página de agenda do profissional.
 
-    Frontend: public/profissional_agendamentos.html
-    JS: static/js/profissional_agendamentos.js
+    Frontend: public/agenda.html
+    JS: static/js/agenda.js
     """
-    logger.info("Acessando /profissional_agendamentos")
-    return render_template("profissional_agendamentos.html")
+    logger.info("Acessando /agenda")
+    return render_template("agenda.html")
 
 # ROTA DA API (COM parâmetro obrigatório)
 @app.route("/api/agendamentos_profissional/<int:id_profissional>")
 def api_agendamentos_profissional(id_profissional):
     """Lista agendamentos de um profissional (com filtros).
 
-    Usada em: public/profissional_agendamentos.html
-    JS: static/js/profissional_agendamentos.js
+    Usada em: public/agenda.html
+    JS: static/js/agenda.js
     Query params opcionais: status (múltiplos), start_date, end_date
     """
     logger.info("API AGENDAMENTOS - ID: %s", id_profissional)
@@ -997,7 +1171,15 @@ def api_agendamentos_profissional(id_profissional):
             .execute()
         
         data = response.data or []
-        
+        # Nome do profissional (único nesta rota)
+        prof_name = None
+        try:
+            prof_resp = supabase.table("profissionais").select("nome").eq("id_profissional", id_profissional).single().execute()
+            if prof_resp.data:
+                prof_name = prof_resp.data.get("nome")
+        except Exception:
+            prof_name = None
+
         for ag in data:
             if ag.get('id_cliente'):
                 cli_resp = supabase.table("clientes")\
@@ -1010,6 +1192,9 @@ def api_agendamentos_profissional(id_profissional):
                 else:
                     ag['cliente_nome'] = 'Anônimo'
                     ag['cliente_telefone'] = '-'
+            # adicionar nome do profissional no payload
+            if prof_name:
+                ag['profissional_nome'] = prof_name
             
             ag['servicos_nomes'] = []
             if ag.get('servicos_ids') and len(ag['servicos_ids']) > 0:
@@ -1062,6 +1247,17 @@ def api_agendamentos_todos():
         
         data = response.data or []
         
+        # mapear nomes dos profissionais para enriquecer a resposta
+        try:
+            ids_prof = sorted({ag.get('id_profissional') for ag in data if ag.get('id_profissional') is not None})
+            prof_map = {}
+            if ids_prof:
+                pros_resp = supabase.table("profissionais").select("id_profissional, nome").in_("id_profissional", ids_prof).execute()
+                for p in pros_resp.data or []:
+                    prof_map[p.get('id_profissional')] = p.get('nome')
+        except Exception:
+            prof_map = {}
+        
         for ag in data:
             if ag.get('id_cliente'):
                 cli_resp = supabase.table("clientes")\
@@ -1074,6 +1270,10 @@ def api_agendamentos_todos():
                 else:
                     ag['cliente_nome'] = 'Anônimo'
                     ag['cliente_telefone'] = '-'
+            # adicionar nome do profissional quando disponível
+            pid = ag.get('id_profissional')
+            if pid in prof_map:
+                ag['profissional_nome'] = prof_map[pid]
             
             ag['servicos_nomes'] = []
             if ag.get('servicos_ids') and len(ag['servicos_ids']) > 0:
@@ -1093,7 +1293,7 @@ def api_agendamentos_todos():
 def get_agendamento_detalhes(id_agendamento):
     """Detalhes completos de um agendamento específico.
 
-    Usada em: public/profissional_agendamentos.html (modal/detalhe).
+    Usada em: public/agenda.html (modal/detalhe).
     """
     try:
         # 1. Buscar agendamento
@@ -1165,8 +1365,8 @@ def get_agendamento_detalhes(id_agendamento):
 def api_agendamento(id):
     """GET: detalhes resumidos; PUT: atualizar dados do agendamento.
 
-    Usada em: public/profissional_agendamentos.html
-    JS: static/js/profissional_agendamentos.js
+    Usada em: public/agenda.html
+    JS: static/js/agenda.js
     """
     if request.method == "GET":
         try:
@@ -1289,8 +1489,8 @@ def api_agendamento(id):
 def api_agendamento_status(id):
     """Atualiza apenas o status do agendamento (PATCH).
 
-    Usada em: public/profissional_agendamentos.html
-    JS: static/js/profissional_agendamentos.js
+    Usada em: public/agenda.html
+    JS: static/js/agenda.js
     """
     logger.info("Atualizando status do agendamento %s", id)
     if not supabase:

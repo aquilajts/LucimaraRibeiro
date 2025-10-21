@@ -92,7 +92,7 @@
 
             const precoSpan = document.createElement('span');
             precoSpan.classList.add('servico-preco');
-            precoSpan.textContent = '- ' + formatarPreco(servico.preco);
+            precoSpan.textContent = ' - ' + formatarPreco(servico.preco);
             label.appendChild(precoSpan);
 
             return label;

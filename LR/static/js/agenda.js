@@ -49,6 +49,18 @@
         return partes[2] + '/' + partes[1] + '/' + partes[0];
     }
 
+    function calcularHoraFim(horaStr, duracaoMin) {
+        if (!horaStr) return '—';
+        const p = horaStr.split(':');
+        let h = parseInt(p[0] || '0', 10);
+        let m = parseInt(p[1] || '0', 10);
+        const totalStart = h * 60 + m;
+        const totalEnd = totalStart + (parseInt(duracaoMin || 0, 10) || 0);
+        const endH = Math.floor((totalEnd % (24 * 60)) / 60);
+        const endM = totalEnd % 60;
+        return String(endH).padStart(2, '0') + ':' + String(endM).padStart(2, '0');
+    }
+
     function criarAgendamentoCard(ag) {
         const card = document.createElement('article');
         card.className = 'booking-card';
@@ -62,7 +74,7 @@
             : 'N/A';
         const precoNumero = Number(ag.preco_total ?? ag.preco ?? 0);
         const precoFormatado = Number.isFinite(precoNumero) ? precoNumero.toFixed(2) : '0.00';
-        const currentStatus = ag.status || '🟡Pendente';
+    const currentStatus = ag.status || '🟡Pendente';
         const statusChip = buildStatusChip(currentStatus);
         const statusSelectId = 'status-' + escapeHtml(String(ag.id_agendamento));
         const statusChoices = STATUS_OPTIONS.includes(currentStatus)
@@ -79,6 +91,9 @@
             ? telefone + ' <a class="booking-card__phone-link" href="' + whatsappHref + '" target="_blank" rel="noopener" aria-label="Conversar pelo WhatsApp com ' + escapeHtml(ag.cliente_nome || 'cliente') + '">📱</a>'
             : telefone;
 
+        const profissionalNome = ag.profissional_nome ? ' • ' + escapeHtml(ag.profissional_nome) : '';
+        const horaFim = calcularHoraFim(String(ag.hora_agendamento || ''), ag.duracao_total);
+
         card.innerHTML = '' +
             '<div class="booking-card__header">' +
             '    <button class="booking-card__toggle" type="button" aria-expanded="false">' +
@@ -88,7 +103,7 @@
             '                <span class="booking-card__time">' + escapeHtml(ag.hora_agendamento || '—') + '</span>' +
             '            </div>' +
             '            <div class="booking-card__summary-side">' +
-            '                <span class="booking-card__client">' + escapeHtml(ag.cliente_nome || 'Cliente nao identificado') + '</span>' +
+            '                <span class="booking-card__client">' + escapeHtml(ag.cliente_nome || 'Cliente nao identificado') + profissionalNome + '</span>' +
             '                <span class="booking-card__summary-status">' + statusChip + '</span>' +
             '            </div>' +
             '        </div>' +
@@ -99,7 +114,7 @@
             '<div class="booking-card__details">' +
             '    <dl class="booking-card__meta">' +
             '        <div><dt>Telefone</dt><dd>' + telefoneHtml + '</dd></div>' +
-            '        <div><dt>Duracao total</dt><dd>' + escapeHtml(String(ag.duracao_total || 0)) + ' min</dd></div>' +
+            '        <div><dt>Duração</dt><dd>De ' + escapeHtml(ag.hora_agendamento || '—') + ' até ' + escapeHtml(horaFim) + '</dd></div>' +
             '        <div><dt>Preco</dt><dd>R$ ' + precoFormatado + '</dd></div>' +
             '        <div><dt>Status</dt><dd><div class="booking-card__status-control"><select id="' + statusSelectId + '" class="booking-card__status-select">' + statusOptionsHtml + '</select></div></dd></div>' +
             '    </dl>' +
@@ -108,6 +123,17 @@
             '        <p>' + servicosLista + '</p>' +
             '    </div>' +
             '</div>';
+
+        // Observações (opcional)
+        if (ag.observacoes && String(ag.observacoes).trim()) {
+            const details = card.querySelector('.booking-card__details');
+            if (details) {
+                const obs = document.createElement('div');
+                obs.className = 'booking-card__services';
+                obs.innerHTML = '<strong>Observações</strong><p>' + escapeHtml(String(ag.observacoes)) + '</p>';
+                details.appendChild(obs);
+            }
+        }
 
         const toggleBtn = card.querySelector('.booking-card__toggle');
         const details = card.querySelector('.booking-card__details');
