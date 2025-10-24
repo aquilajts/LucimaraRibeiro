@@ -5,16 +5,89 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Serviços</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}" />
-  <style>
-    .placeholder { max-width: 720px; margin: 60px auto; text-align: center; padding: 40px 24px; border-radius: 14px; background: rgba(255, 255, 255, 0.12); }
-    .placeholder h1 { font-size: clamp(26px, 6vw, 34px); margin-bottom: 12px; }
-    .placeholder p { font-size: 15px; opacity: 0.8; }
-  </style>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/servicos.css') }}" />
 </head>
 <body>
-  <main class="placeholder">
-    <h1>Serviços</h1>
-    <p>Tela ainda sem informações.</p>
+  <main class="srv">
+    <header class="srv__header">
+      <div>
+        <p class="srv__eyebrow">Painel interno</p>
+        <h1 class="srv__title">🧰 Serviços</h1>
+        <p class="srv__subtitle">Gerencie seus serviços cadastrados.</p>
+      </div>
+      <a class="srv__logout" href="/painel/logout">Sair</a>
+    </header>
+
+    <section class="srv__filters">
+      <label>
+        <span>Categoria</span>
+        <select id="f-categoria"></select>
+      </label>
+      <label>
+        <span>Status</span>
+        <select id="f-status">
+          <option value="todos">Todos</option>
+          <option value="ativo">Ativo</option>
+          <option value="inativo">Inativo</option>
+        </select>
+      </label>
+      <button id="f-aplicar" class="srv__btn">Aplicar</button>
+    </section>
+
+    <section class="srv__grid" id="srv-grid" aria-live="polite"></section>
   </main>
+
+  <div id="srv-modal" class="srv-modal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="srv-modal-title">
+    <div class="srv-modal__content">
+      <button class="srv-modal__close" type="button" aria-label="Fechar">×</button>
+      <h2 id="srv-modal-title" class="srv-modal__title">Novo serviço</h2>
+      <form id="srv-form" class="srv-form">
+        <input type="hidden" id="srv-id" />
+        <label>
+          <span>Nome</span>
+          <input id="srv-nome" required />
+        </label>
+        <label>
+          <span>Categoria</span>
+          <input id="srv-categoria" />
+        </label>
+        <label>
+          <span>Descrição</span>
+          <textarea id="srv-descricao" rows="3"></textarea>
+        </label>
+        <div class="srv-form__row">
+          <label>
+            <span>Tempo (min)</span>
+            <input id="srv-duracao" type="number" min="0" step="5" />
+          </label>
+          <label>
+            <span>Preço (R$)</span>
+            <input id="srv-preco" type="number" min="0" step="0.01" />
+          </label>
+        </div>
+        <div class="srv-dep-row">
+          <label class="srv-dep__select">
+            <span>Adicionar dependência</span>
+            <div class="srv-dep__inline">
+              <select id="srv-dep-select"></select>
+              <button type="button" id="srv-dep-add" class="srv__btn srv__btn--small">Inserir como dependência</button>
+            </div>
+            <small class="srv-dep__hint">O serviço ficará disponível ao cliente somente se ele selecionar pelo menos um dos serviços listados abaixo.</small>
+          </label>
+          <div id="srv-dep-list" class="srv-dep-chips" aria-live="polite"></div>
+        </div>
+        <label class="srv-switch">
+          <input id="srv-ativo" type="checkbox" checked />
+          <span>Ativo</span>
+        </label>
+        <div class="srv-form__actions">
+          <button type="button" class="srv__btn srv__btn--ghost" id="srv-cancelar">Cancelar</button>
+          <button type="submit" class="srv__btn" id="srv-salvar">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='js/servicos.js') }}"></script>
 </body>
 </html>

@@ -621,6 +621,16 @@ def agendamento():
     return render_template("agendamento.html", user=get_user(), min_date=min_date)
 
 # ================================
+# Página de Serviços (Painel)
+# ================================
+@app.route("/servicos")
+def servicos_page():
+    """Tela de gestão de serviços (restrita ao Painel interno)."""
+    if not session.get("painel_interno_ok"):
+        return redirect(url_for("painel_login"))
+    return render_template("servicos.html")
+
+# ================================
 # APIs - Serviços, Categorias e Totais
 # ================================
 @app.route("/api/calcular_total", methods=["POST"])
@@ -700,7 +710,7 @@ def api_servicos():
         return jsonify([])
     try:
         categoria = request.args.get("categoria")
-        query = supabase.table("servicos").select("id_servico, nome, categoria, duracao_minutos, preco").eq("ativo", True)
+        query = supabase.table("servicos").select("id_servico, nome, categoria, duracao_minutos, preco, dependencia").eq("ativo", True)
         if categoria:
             query = query.eq("categoria", categoria)
         response = query.order("nome").execute()
@@ -729,7 +739,7 @@ def api_agendamento_opcoes():
 
     try:
         servicos_resp = supabase.table("servicos").select(
-            "id_servico, nome, categoria, duracao_minutos, preco, ativo"
+            "id_servico, nome, categoria, duracao_minutos, preco, ativo, dependencia"
         ).eq("ativo", True).order("categoria").order("nome").execute()
         servicos_data = servicos_resp.data or []
 
@@ -786,7 +796,8 @@ def api_agendamento_opcoes():
                 "categoria": categoria,
                 "preco": float(servico.get("preco") or 0),
                 "duracao_minutos": servico.get("duracao_minutos"),
-                "profissionais": profissionais_lista
+                "profissionais": profissionais_lista,
+                "dependencia": (servico.get("dependencia") or None)
             })
 
         servicos_payload.sort(key=lambda s: (s["categoria"].lower(), s["nome"].lower()))
@@ -1561,6 +1572,128 @@ def api_status():
     except Exception as e:
         logger.error("Erro ao consultar status: %s", str(e))
         return jsonify([]), 500
+
+# ================================
+# Admin: Serviços (CRUD simples, apenas Painel)
+# ================================
+
+def _require_painel_auth():
+    if not session.get("painel_interno_ok"):
+        return jsonify({"error": "Não autorizado"}), 403
+    return None
+
+
+@app.route("/api/admin/categorias")
+def admin_categorias():
+    """Lista categorias distintas (todas, ignorando status)."""
+    auth = _require_painel_auth()
+    if auth:
+        return auth
+    try:
+        if not supabase:
+            return jsonify([])
+        resp = supabase.table("servicos").select("categoria").execute()
+        categorias = sorted({(row.get("categoria") or "").strip() for row in (resp.data or []) if row.get("categoria")})
+        return jsonify(categorias)
+    except Exception as exc:
+        logger.error("Admin categorias erro: %s", exc)
+        return jsonify([]), 500
+
+
+@app.route("/api/admin/servicos", methods=["GET", "POST"])
+def admin_servicos():
+    """GET: lista serviços com filtros; POST: cria novo serviço."""
+    auth = _require_painel_auth()
+    if auth:
+        return auth
+    if not supabase:
+        return jsonify([]), 503
+
+    try:
+        if request.method == "GET":
+            categoria = (request.args.get("categoria") or "").strip()
+            status = (request.args.get("status") or "todos").lower()
+            q = supabase.table("servicos").select("id_servico, nome, descricao, preco, duracao_minutos, ativo, categoria, dependencia")
+            if categoria:
+                q = q.eq("categoria", categoria)
+            if status == "ativo":
+                q = q.eq("ativo", True)
+            elif status == "inativo":
+                q = q.eq("ativo", False)
+            res = q.order("categoria").order("nome").execute()
+            return jsonify(res.data or [])
+
+        # POST - criar
+        data = request.get_json(silent=True) or {}
+        payload = {
+            "nome": (data.get("nome") or "").strip(),
+            "categoria": (data.get("categoria") or "").strip() or None,
+            "descricao": (data.get("descricao") or "").strip() or None,
+            "duracao_minutos": int(data.get("duracao_minutos") or 0),
+            "preco": float(data.get("preco") or 0.0),
+            "ativo": bool(data.get("ativo", True)),
+        }
+        # Coluna 'dependencia' armazena nomes de serviços separados por vírgula
+        if "dependencia" in data:
+            dep = (data.get("dependencia") or "").strip()
+            # Normaliza espaços após vírgulas
+            dep = ", ".join([p.strip() for p in dep.split(",") if p.strip()]) if dep else None
+            payload["dependencia"] = dep
+        if not payload["nome"]:
+            return jsonify({"success": False, "error": "Nome é obrigatório"}), 400
+        res = supabase.table("servicos").insert(payload).execute()
+        return jsonify({"success": True, "data": (res.data or [None])[0]}), 201
+    except Exception as exc:
+        logger.error("Admin servicos erro: %s", exc)
+        return jsonify({"success": False, "error": "Falha ao processar"}), 500
+
+
+@app.route("/api/admin/servicos/<int:id_servico>", methods=["GET", "PUT"])
+def admin_servico_detalhe(id_servico: int):
+    """GET: carrega serviço; PUT: atualiza."""
+    auth = _require_painel_auth()
+    if auth:
+        return auth
+    if not supabase:
+        return jsonify({}), 503
+
+    try:
+        if request.method == "GET":
+            res = supabase.table("servicos").select("id_servico, nome, descricao, preco, duracao_minutos, ativo, categoria, dependencia").eq("id_servico", id_servico).single().execute()
+            if not res.data:
+                return jsonify({"error": "Não encontrado"}), 404
+            return jsonify(res.data)
+
+        data = request.get_json(silent=True) or {}
+        update = {}
+        for key in ("nome", "descricao", "categoria"):
+            if key in data:
+                val = (data.get(key) or "").strip()
+                update[key] = val or None
+        if "dependencia" in data:
+            dep = (data.get("dependencia") or "").strip()
+            dep = ", ".join([p.strip() for p in dep.split(",") if p.strip()]) if dep else None
+            update["dependencia"] = dep
+        if "preco" in data:
+            try:
+                update["preco"] = float(data.get("preco") or 0)
+            except Exception:
+                return jsonify({"error": "Preço inválido"}), 400
+        if "duracao_minutos" in data:
+            try:
+                update["duracao_minutos"] = int(data.get("duracao_minutos") or 0)
+            except Exception:
+                return jsonify({"error": "Duração inválida"}), 400
+        if "ativo" in data:
+            update["ativo"] = bool(data.get("ativo"))
+
+        if not update:
+            return jsonify({"success": False, "error": "Nada para atualizar"}), 400
+        res = supabase.table("servicos").update(update).eq("id_servico", id_servico).execute()
+        return jsonify({"success": True, "data": (res.data or [None])[0]})
+    except Exception as exc:
+        logger.error("Admin servico detalhe erro: %s", exc)
+        return jsonify({"success": False, "error": "Falha ao processar"}), 500
 
 if __name__ == "__main__":
     # ================================

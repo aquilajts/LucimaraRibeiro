@@ -95,7 +95,60 @@
             precoSpan.textContent = ' - ' + formatarPreco(servico.preco);
             label.appendChild(precoSpan);
 
+            // Dependências: string de nomes separados por vírgula (qualquer um habilita)
+            const depStr = (servico.dependencia || '').trim();
+            const deps = depStr ? depStr.split(',').map(s=>s.trim()).filter(Boolean) : [];
+            if (deps.length > 0){
+                checkbox.dataset.deps = deps.join('|');
+                // desabilita inicialmente até que alguma dependência seja selecionada
+                const permitido = hasAnyDependencySatisfied(deps);
+                checkbox.disabled = !permitido;
+                const hint = document.createElement('small');
+                hint.classList.add('servico-dep-hint');
+                hint.style.marginLeft = '6px';
+                hint.style.opacity = '0.8';
+                hint.textContent = ' (adicional; exige: ' + deps.join(' ou ') + ')';
+                label.appendChild(hint);
+            }
+
             return label;
+        }
+
+        function hasAnyDependencySatisfied(depNames){
+            if (!Array.isArray(depNames) || depNames.length === 0) return true;
+            const selectedIds = getSelectedServiceIds();
+            if (selectedIds.length === 0) return false;
+            const selectedNames = new Set(selectedIds.map(id => (servicoPorId.get(id) || {}).nome).filter(Boolean));
+            return depNames.some(n => selectedNames.has(n));
+        }
+
+        let depsGuard = false;
+        function atualizarEstadoDependencias(){
+            if (depsGuard) return;
+            depsGuard = true;
+            const checkboxes = categoriasContainer
+                ? categoriasContainer.querySelectorAll('input.servico-checkbox')
+                : (legacyServicosContainer ? legacyServicosContainer.querySelectorAll('input.servico-checkbox') : []);
+            const selectedIds = getSelectedServiceIds();
+            const selectedNames = new Set(selectedIds.map(id => (servicoPorId.get(id)||{}).nome).filter(Boolean));
+            checkboxes.forEach(cb => {
+                const depAttr = cb.dataset.deps || '';
+                if (!depAttr){
+                    cb.disabled = false;
+                    return;
+                }
+                const deps = depAttr.split('|').map(s=>s.trim()).filter(Boolean);
+                const ok = deps.some(n => selectedNames.has(n));
+                if (!ok){
+                    cb.disabled = true;
+                    if (cb.checked){
+                        cb.checked = false; // força desmarcar se requisito não atendido
+                    }
+                } else {
+                    cb.disabled = false;
+                }
+            });
+            depsGuard = false;
         }
 
         function limparObservacoes() {
@@ -470,6 +523,8 @@
         }
 
         const onServicesChange = () => {
+            // Primeiro, aplica/valida dependências e limpa seleções inválidas
+            atualizarEstadoDependencias();
             const selectedIds = getSelectedServiceIds();
             atualizarTotal(selectedIds);
             atualizarProfissionaisDisponiveis(selectedIds);
@@ -504,7 +559,8 @@
                         nome: servico.nome,
                         categoria: categoria,
                         preco: servico.preco,
-                        duracao_minutos: servico.duracao_minutos
+                        duracao_minutos: servico.duracao_minutos,
+                        dependencia: servico.dependencia || ''
                     });
 
                     if (!servicosPorCategoria.has(categoria)) {
